@@ -1,0 +1,137 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Linting & formatting
+.ruff_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env.local
+.env.*.local
+
+# PyTorch models and training artifacts
+training/models/*/checkpoints/
+training/models/*/logs/
+training/models/*/wandb/
+*.pth
+*.pt
+*.ckpt
+
+# Data files (keep structure, ignore data)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/external/*
+!data/external/.gitkeep
+
+# ML experiment tracking
+wandb/
+mlruns/
+.neptune/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Secrets and keys (IMPORTANT for trading)
+*.key
+*.pem
+.secrets/
+private_keys/
+wallets/
+
+# Configuration overrides
+config/local.yaml
+config/secrets.yaml
+config/.env
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Documentation build
+docs/_build/
+docs/build/
+
+# Package manager files
+uv.lock
+
+# Claude Code specific
+.claude/
+.specify/
+
+# Project specific
+specs/
+
+# Training packages and test files
+*.tar.gz
+test_brain_only.py
+test_fin_r1.py
