@@ -1,0 +1,34 @@
+# ROOK Agent Default Configuration
+# All trading parameters and risk limits
+
+trading:
+  # Trading pair settings
+  default_pair: "ETH/USDC"
+  default_fee_tier: 0.0005  # 0.05%
+
+  # Portfolio settings
+  default_target_allocation: 0.5
+
+  # Risk limits
+  max_slippage: 0.03  # 3%
+  max_position_size: 0.1  # 10% of portfolio
+  max_daily_trades: 50
+  min_confidence: 0.3
+
+  # Execution settings
+  default_slippage: 0.005  # 0.5%
+  default_deadline_minutes: 20
+  min_trade_size_eth: 0.001  # 0.001 ETH
+
+  # Risk thresholds
+  high_volatility_threshold: 0.1  # 10% volatility threshold
+
+model:
+  # Default model configuration
+  default_name: "fin-r1"
+  default_provider: "ollama"
+
+portfolio:
+  # Initial balance defaults (0 means read from blockchain)
+  initial_eth_balance: 0.0
+  initial_usdc_balance: 0.0
