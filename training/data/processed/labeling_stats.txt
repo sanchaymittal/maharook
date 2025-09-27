@@ -1,0 +1,28 @@
+Heuristic Labeling Statistics
+============================
+
+Action Distribution:
+  HOLD: 7874 (78.7%)
+  SELL: 1149 (11.5%)
+  BUY: 977 (9.8%)
+
+Rule Trigger Distribution:
+  NO_SIGNAL: 7735 (77.3%)
+  MEAN_REVERSION_SELL: 897 (9.0%)
+  MEAN_REVERSION_BUY: 704 (7.0%)
+  BREAKOUT_BUY: 273 (2.7%)
+  BREAKOUT_SELL: 252 (2.5%)
+  LIQUIDITY_FILTER: 71 (0.7%)
+  VOLATILITY_FILTER: 68 (0.7%)
+
+Confidence Statistics:
+  Mean: 0.446
+  Std: 0.128
+  Min: 0.017
+  Max: 0.800
+
+Position Sizing (Non-HOLD actions):
+  Mean size: 0.057
+  Std size: 0.013
+  Min size: 0.050
+  Max size: 0.080

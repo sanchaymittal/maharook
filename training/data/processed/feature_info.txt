@@ -1,0 +1,46 @@
+Feature Pipeline Output
+======================
+
+Core features: 10000 rows, 13 columns
+Conditions: 1 rows, 24 columns
+
+Core feature columns:
+  - timestamp
+  - price
+  - amount0_eth
+  - amount1_usdc
+  - volume
+  - volatility
+  - volume_ma
+  - tick_change
+  - time_diff
+  - liquidity_impact
+  - price_change
+  - tick
+  - liquidity
+
+Condition columns:
+  - avg_price_10
+  - price_volatility_10
+  - avg_volume_10
+  - avg_tick_change_10
+  - avg_time_diff_10
+  - liquidity_impact_avg_10
+  - avg_price_50
+  - price_volatility_50
+  - avg_volume_50
+  - avg_tick_change_50
+  - avg_time_diff_50
+  - liquidity_impact_avg_50
+  - avg_price_100
+  - price_volatility_100
+  - avg_volume_100
+  - avg_tick_change_100
+  - avg_time_diff_100
+  - liquidity_impact_avg_100
+  - total_transactions
+  - price_trend
+  - volume_trend
+  - current_price
+  - current_liquidity
+  - timestamp

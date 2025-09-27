@@ -1,0 +1,48 @@
+{
+  "seq_len": 30,
+  "n_core_features": 6,
+  "n_condition_features": 23,
+  "core_feature_names": [
+    "price",
+    "volatility",
+    "volume",
+    "volume_ma",
+    "liquidity_impact",
+    "price_change"
+  ],
+  "condition_feature_names": [
+    "avg_price_10",
+    "price_volatility_10",
+    "avg_volume_10",
+    "avg_tick_change_10",
+    "avg_time_diff_10",
+    "liquidity_impact_avg_10",
+    "avg_price_50",
+    "price_volatility_50",
+    "avg_volume_50",
+    "avg_tick_change_50",
+    "avg_time_diff_50",
+    "liquidity_impact_avg_50",
+    "avg_price_100",
+    "price_volatility_100",
+    "avg_volume_100",
+    "avg_tick_change_100",
+    "avg_time_diff_100",
+    "liquidity_impact_avg_100",
+    "total_transactions",
+    "price_trend",
+    "volume_trend",
+    "current_price",
+    "current_liquidity"
+  ],
+  "side_classes": [
+    "BUY",
+    "HOLD",
+    "SELL"
+  ],
+  "splits": {
+    "train_size": 6979,
+    "val_size": 1496,
+    "test_size": 1496
+  }
+}
