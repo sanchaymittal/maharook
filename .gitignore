@@ -79,6 +79,7 @@ logs/
 training/models/*/checkpoints/
 training/models/*/logs/
 training/models/*/wandb/
+models/
 *.pth
 *.pt
 *.ckpt
