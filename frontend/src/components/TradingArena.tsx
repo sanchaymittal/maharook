@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Group } from 'three'
 import AgentOrb from './AgentOrb'
@@ -24,6 +24,12 @@ const AGENT_COLORS: AgentColors[] = [
 
 const TradingArena: React.FC<TradingArenaProps> = ({ agents, trades }) => {
   const groupRef = React.useRef<Group>(null)
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('TradingArena: agents=', agents.length, agents)
+    console.log('TradingArena: trades=', trades.length, trades)
+  }, [agents, trades])
 
   // Slowly rotate the entire arena
   useFrame((state) => {
@@ -59,6 +65,16 @@ const TradingArena: React.FC<TradingArenaProps> = ({ agents, trades }) => {
           />
         )
       })}
+
+      {/* Debug: Always visible orb */}
+      <mesh position={[0, 2, 0]}>
+        <sphereGeometry args={[1, 32, 32]} />
+        <meshStandardMaterial
+          color="#ff0000"
+          emissive="#ff0000"
+          emissiveIntensity={0.3}
+        />
+      </mesh>
 
       {/* Ambient Cosmic Effects */}
       <pointLight position={[0, 10, 0]} intensity={0.3} color="#4a90e2" />

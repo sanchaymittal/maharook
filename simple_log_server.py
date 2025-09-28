@@ -122,6 +122,23 @@ class SimpleLogServer:
                             }
                         })
 
+                        # Also broadcast as agent_status for the main UI
+                        await self.connection_manager.broadcast({
+                            "type": "agent_status",
+                            "data": {
+                                "agent_id": agent_id,
+                                "name": agent_state.name,
+                                "config_path": agent_state.config_path,
+                                "status": agent_state.status,
+                                "start_time": int(agent_state.start_time),
+                                "last_update": int(agent_state.last_update),
+                                "total_steps": agent_state.total_steps,
+                                "total_trades": agent_state.total_trades,
+                                "current_nav": agent_state.current_nav,
+                                "total_pnl": agent_state.total_pnl
+                            }
+                        })
+
                     # Check for state changes (new steps, trades, etc.)
                     last_state = self.last_states.get(agent_id)
 
@@ -139,6 +156,45 @@ class SimpleLogServer:
                             await self.connection_manager.broadcast({
                                 "type": "agent_log",
                                 "data": log_message
+                            })
+
+                        # Also broadcast updated agent status
+                        await self.connection_manager.broadcast({
+                            "type": "agent_status",
+                            "data": {
+                                "agent_id": agent_id,
+                                "name": agent_state.name,
+                                "config_path": agent_state.config_path,
+                                "status": agent_state.status,
+                                "start_time": int(agent_state.start_time),
+                                "last_update": int(agent_state.last_update),
+                                "total_steps": agent_state.total_steps,
+                                "total_trades": agent_state.total_trades,
+                                "current_nav": agent_state.current_nav,
+                                "total_pnl": agent_state.total_pnl
+                            }
+                        })
+
+                        # If there was a trade, also broadcast it as trading_update
+                        if (agent_state.total_trades > (last_state.total_trades if last_state else 0) and
+                            agent_state.last_action and agent_state.last_action in ["BUY", "SELL"]):
+
+                            await self.connection_manager.broadcast({
+                                "type": "trading_update",
+                                "data": {
+                                    "agent_id": agent_id,
+                                    "pair": agent_state.pair,
+                                    "step": agent_state.total_steps,
+                                    "action": agent_state.last_action,
+                                    "amount_eth": agent_state.last_amount or 0.0,
+                                    "price": agent_state.last_price or 0.0,
+                                    "tx_hash": f"0x{agent_id[-16:]}...",  # Mock hash
+                                    "pnl": agent_state.total_pnl,
+                                    "nav": agent_state.current_nav,
+                                    "timestamp": int(agent_state.last_update),
+                                    "confidence": agent_state.last_confidence or 0.0,
+                                    "reasoning": agent_state.last_reasoning or ""
+                                }
                             })
 
                 # Clean up removed agents
