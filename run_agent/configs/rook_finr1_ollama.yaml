@@ -1,0 +1,48 @@
+# ROOK Agent Configuration - Fin-R1 via Ollama
+# Integrates with MAHAROOK RookAgent framework
+
+agent:
+  name: "ROOK-FinR1-Ollama"
+  pair: "WETH_USDC"
+  pool_id: null
+  fee_tier: 0.0005
+
+# Model configuration for Brain component
+model:
+  model_name: "hf.co/Mungert/Fin-R1-GGUF:latest"
+  model_provider: "ollama"
+  adapter_path: null
+
+# Portfolio configuration
+portfolio:
+  target_allocation: 0.5
+  initial_eth_balance: 10.0
+  initial_usdc_balance: 10000.0
+
+# Risk management
+risk:
+  max_slippage: 0.005
+  max_position_size: 0.1
+  max_daily_trades: 50
+  min_confidence: 0.3
+
+# Execution settings
+execution:
+  default_slippage: 0.002
+  default_deadline: 15
+  min_trade_size: 0.01
+
+# Blockchain configuration
+blockchain:
+  rpc_url: "http://localhost:8545"
+  private_key: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"  # Anvil account #0
+  chain_id: 8453
+
+# Metadata
+metadata:
+  description: "Fin-R1 specialized financial model via Ollama"
+  model_size: "4.7 GB"
+  model_type: "Fin-R1 GGUF model"
+  provider: "Ollama inference engine"
+  specialization: "Advanced financial reasoning and trading strategies"
+  notes: "Specialized financial model designed for trading and investment analysis"

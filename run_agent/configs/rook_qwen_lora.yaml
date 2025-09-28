@@ -1,0 +1,50 @@
+# ROOK Agent Configuration - Qwen2.5 LoRA Model
+# Integrates with MAHAROOK RookAgent framework
+
+agent:
+  name: "ROOK-Qwen2.5-LoRA"
+  pair: "WETH_USDC"
+  pool_id: null
+  fee_tier: 0.0005
+
+# Model configuration for Brain component
+model:
+  model_name: "Qwen/Qwen2-1.5B"
+  model_provider: "transformers"
+  adapter_path: "models/qwen25_lora"
+
+# Portfolio configuration
+portfolio:
+  target_allocation: 0.5
+  initial_eth_balance: 10.0
+  initial_usdc_balance: 10000.0
+
+# Risk management
+risk:
+  max_slippage: 0.005
+  max_position_size: 0.1
+  max_daily_trades: 50
+  min_confidence: 0.3
+
+# Execution settings
+execution:
+  default_slippage: 0.002
+  default_deadline: 15
+  min_trade_size: 0.01
+
+# Blockchain configuration
+blockchain:
+  rpc_url: "http://localhost:8545"
+  private_key: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"  # Anvil account #2
+  chain_id: 8453
+
+# Metadata
+metadata:
+  description: "Qwen2.5 LoRA fine-tuned model for financial trading"
+  training_completed: true
+  training_loss: 0.3952
+  training_samples: 200
+  training_epochs: 3
+  training_time: "33.4 minutes"
+  performance: "86% loss reduction"
+  specialization: "Financial trading decisions with buy/sell recommendations"

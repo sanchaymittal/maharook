@@ -1,0 +1,48 @@
+# ROOK Agent Configuration - Ollama Qwen2.5 Model
+# Integrates with MAHAROOK RookAgent framework
+
+agent:
+  name: "ROOK-Qwen2.5-Ollama"
+  pair: "WETH_USDC"
+  pool_id: null
+  fee_tier: 0.0005
+
+# Model configuration for Brain component
+model:
+  model_name: "qwen2.5:1.5b"
+  model_provider: "ollama"
+  adapter_path: null
+
+# Portfolio configuration
+portfolio:
+  target_allocation: 0.5
+  initial_eth_balance: 10.0
+  initial_usdc_balance: 10000.0
+
+# Risk management
+risk:
+  max_slippage: 0.005
+  max_position_size: 0.1
+  max_daily_trades: 50
+  min_confidence: 0.3
+
+# Execution settings
+execution:
+  default_slippage: 0.002
+  default_deadline: 15
+  min_trade_size: 0.01
+
+# Blockchain configuration
+blockchain:
+  rpc_url: "http://localhost:8545"
+  private_key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"  # Anvil account #1
+  chain_id: 8453
+
+# Metadata
+metadata:
+  description: "Qwen2.5-1.5B model via Ollama for general trading"
+  model_size: "986 MB"
+  model_type: "Base Qwen2.5-1.5B model"
+  provider: "Ollama inference engine"
+  specialization: "General purpose financial AI with trading capabilities"
+  notes: "Uses pre-trained Qwen2.5 model without additional fine-tuning"
