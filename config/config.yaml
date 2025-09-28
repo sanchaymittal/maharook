@@ -1,0 +1,125 @@
+# Maharook Configuration - SINGLE SOURCE OF TRUTH
+# Base Mainnet Configuration for ROOK Autonomous Trading
+
+# Network Configuration
+network:
+  name: "Base"
+  chain_id: 8453
+  rpc_url: "https://mainnet.base.org"
+  ws_url: "wss://mainnet.base.org"
+  block_explorer: "https://basescan.org"
+
+# Token Configuration - Clear addresses for Base mainnet
+tokens:
+  - address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"  # BASE_USDC_ADDRESS - 6 decimals — pay attention to 6 decimals as most tokens are 18 decimals
+    decimals: 6
+    symbol: "USDC"
+    name: "USD Coin"
+
+  - address: "0x0000000000000000000000000000000000000000"  # ETH_ADDRESS - ETH native token address with standard 18 decimals
+    decimals: 18
+    symbol: "ETH"
+    name: "Ether"
+
+  - address: "0x4200000000000000000000000000000000000006"  # WETH_ADDRESS - WETH address on BASE with standard 18 decimals
+    decimals: 18
+    symbol: "WETH"
+    name: "Wrapped Ether"
+
+# Smart Contract Configuration - Uniswap V4 on Base
+contracts:
+  - name: "UNISWAP_V4_POOL_MANAGER"
+    address: "0x498581fF718922c3f8e6A244956aF099B2652b2b"
+    abi_path: "abi/uniswap_v4_pool_manager.json"
+
+  - name: "UNISWAP_V4_POSITION_DESCRIPTOR"
+    address: "0x25D093633990DC94BeDEeD76C8F3CDaa75f3E7D5"
+    abi_path: "abi/uniswap_v4_position_descriptor.json"
+
+  - name: "UNISWAP_V4_POSITION_MANAGER"
+    address: "0x7C5f5A4bBd8fD63184577525326123B519429bDc"
+    abi_path: "abi/uniswap_v4_position_manager.json"
+
+  - name: "UNISWAP_V4_QUOTER"
+    address: "0x0d5e0F971ED27FBfF6c2837bf31316121532048D"
+    abi_path: "abi/uniswap_v4_quoter.json"
+
+  - name: "UNISWAP_V4_STATE_VIEW"
+    address: "0xA3c0c9b65baD0b08107Aa264b0f3dB444b867A71"
+    abi_path: "abi/uniswap_v4_state_view.json"
+
+  - name: "UNISWAP_V3_SWAPROUTER"
+    address: "0x2626664c2603336E57B271c5C0b26F421741e481"
+    abi_path: "abi/uniswap_v3_swaprouter.json"
+
+  - name: "UNISWAP_V4_UNIVERSAL_ROUTER"
+    address: "0x6fF5693b99212Da76ad316178A184AB56D299b43"
+    abi_path: "abi/uniswap_v4_universal_router.json"
+
+  - name: "UNISWAP_V4_ETH_USDC_POOL"
+    address: "0x96d4b53a38337a5733179751781178a2613306063c511b78cd02684739288c0a"
+    description: "ETH/USDC 0.05% pool on Base"
+
+# Pool Configuration
+pools:
+  ETH_USDC_500:
+    address: "0x96d4b53a38337a5733179751781178a2613306063c511b78cd02684739288c0a"
+    token0: "0x4200000000000000000000000000000000000006"  # WETH
+    token1: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"  # USDC
+    fee: 500  # 0.05%
+    protocol: "v4"
+
+# Trading Configuration
+trading:
+  # Default trading pair
+  default_pair: "ETH/USDC"
+  default_fee_tier: 0.0005  # 0.05%
+
+  # Portfolio settings
+  default_target_allocation: 0.5  # 50% ETH, 50% USDC
+
+  # Risk management
+  max_slippage: 0.03  # 3%
+  max_position_size: 0.1  # 10% of portfolio per trade
+  max_daily_trades: 50
+  min_confidence: 0.3
+
+  # Execution settings
+  default_slippage: 0.005  # 0.5%
+  default_deadline_minutes: 20
+  min_trade_size_eth: 0.001  # 0.001 ETH minimum
+  max_gas_price: 50000000000  # 50 gwei max
+  default_gas_limit: 300000
+
+  # Risk thresholds
+  high_volatility_threshold: 0.1  # 10%
+
+# Model Configuration
+model:
+  default_name: "fin-r1"
+  default_provider: "ollama"
+
+# ROOK Agent Configuration
+agent:
+  name: "rook_eth_usdc"
+  pair: "ETH/USDC"
+  pool_id: "0x96d4b53a38337a5733179751781178a2613306063c511b78cd02684739288c0a"
+  fee_tier: 0.0005
+
+# Portfolio defaults
+portfolio:
+  initial_eth_balance: 0.0  # Read from blockchain
+  initial_usdc_balance: 0.0  # Read from blockchain
+
+# Monitoring and logging
+monitoring:
+  enable_metrics: true
+  log_level: "INFO"
+  save_state_interval: 300  # 5 minutes
+  performance_report_interval: 600  # 10 minutes
+
+# Market data
+market_data:
+  price_feed: "coingecko"
+  update_interval: 30  # seconds
+  volatility_window: 600  # 10 minutes

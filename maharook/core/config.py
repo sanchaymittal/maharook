@@ -73,28 +73,23 @@ class TradingConfig(BaseModel):
 
 
 class CoreSettings(BaseSettings):
-    """Core application settings."""
+    """Core application settings loaded from config.yaml."""
 
     # Environment
     environment: str = "development"
     log_level: str = "INFO"
 
-    # Network settings
-    network: NetworkConfig = NetworkConfig(
-        name="base",
-        chain_id=8453,
-        rpc_url="https://mainnet.base.org",
-        ws_url="wss://mainnet.base.org",
-        explorer_url="https://basescan.org"
-    )
+    # Network settings - loaded from config.yaml
+    network: NetworkConfig | None = None
 
-    # Trading settings
-    trading: TradingConfig = TradingConfig()
+    # Trading settings - loaded from config.yaml
+    trading: TradingConfig | None = None
 
     # API Keys
     basescan_api_key: str | None = None
     coingecko_api_key: str | None = None
     openrouter_api_key: str | None = None
+    fluence_api_key: str | None = None
 
     # Paths
     config_dir: Path = Path("config")
@@ -119,45 +114,65 @@ class ConfigManager:
         self._load_configurations()
 
     def _load_configurations(self):
-        """Load all configuration files."""
+        """Load all configuration from single config.yaml file."""
         try:
-            self._load_tokens()
-            self._load_contracts()
+            self._load_from_single_file()
         except Exception as e:
             raise ConfigurationError(f"Failed to load configuration: {e}")
 
-    def _load_tokens(self):
-        """Load token configurations."""
-        tokens_file = self.config_path / "tokens.yaml"
-        if tokens_file.exists():
-            with open(tokens_file) as f:
-                tokens_data = yaml.safe_load(f)
-
-            for token_data in tokens_data.get('tokens', []):
-                token = TokenConfig(**token_data)
-                self._tokens[token.symbol] = token
-        else:
-            # No hardcoded values - configuration file is required
+    def _load_from_single_file(self):
+        """Load all configuration from config.yaml - single source of truth."""
+        config_file = self.config_path / "config.yaml"
+        if not config_file.exists():
             raise ConfigurationError(
-                f"Token configuration file not found: {tokens_file}. "
-                f"Please create config/tokens.yaml with token configurations."
+                f"Configuration file not found: {config_file}. "
+                f"Please create config/config.yaml with all configurations."
             )
 
-    def _load_contracts(self):
-        """Load contract configurations."""
-        contracts_file = self.config_path / "contracts.yaml"
-        if contracts_file.exists():
-            with open(contracts_file) as f:
-                contracts_data = yaml.safe_load(f)
+        with open(config_file) as f:
+            config_data = yaml.safe_load(f)
 
-            for contract_data in contracts_data.get('contracts', []):
-                contract = ContractConfig(**contract_data)
-                self._contracts[contract.name] = contract
-        else:
-            # No hardcoded values - configuration file is required
-            raise ConfigurationError(
-                f"Contract configuration file not found: {contracts_file}. "
-                f"Please create config/contracts.yaml with contract configurations."
+        # Load tokens
+        for token_data in config_data.get('tokens', []):
+            token = TokenConfig(**token_data)
+            self._tokens[token.symbol] = token
+
+        # Load contracts
+        for contract_data in config_data.get('contracts', []):
+            contract = ContractConfig(**contract_data)
+            self._contracts[contract.name] = contract
+
+        # Load network configuration from config.yaml
+        if 'network' in config_data:
+            network_data = config_data['network']
+            self.settings.network = NetworkConfig(
+                name=network_data.get('name', 'base'),
+                chain_id=network_data.get('chain_id', 8453),
+                rpc_url=network_data.get('rpc_url', ''),
+                ws_url=network_data.get('ws_url'),
+                explorer_url=network_data.get('block_explorer')
+            )
+
+        # Load trading configuration from config.yaml
+        if 'trading' in config_data:
+            trading_data = config_data['trading']
+            self.settings.trading = TradingConfig(
+                max_slippage_bps=int(trading_data.get('max_slippage', 0.03) * 10000),
+                gas_price_gwei=trading_data.get('max_gas_price', 50) // 1000000000,
+                max_gas_limit=trading_data.get('default_gas_limit', 300000),
+                min_trade_size_eth=trading_data.get('min_trade_size_eth', 0.001),
+                default_pair=trading_data.get('default_pair', 'ETH/USDC'),
+                default_fee_tier=trading_data.get('default_fee_tier', 0.0005),
+                default_target_allocation=trading_data.get('default_target_allocation', 0.5),
+                max_slippage=trading_data.get('max_slippage', 0.03),
+                max_position_size=trading_data.get('max_position_size', 0.1),
+                max_daily_trades=trading_data.get('max_daily_trades', 50),
+                min_confidence=trading_data.get('min_confidence', 0.3),
+                default_slippage=trading_data.get('default_slippage', 0.005),
+                default_deadline_minutes=trading_data.get('default_deadline_minutes', 20),
+                high_volatility_threshold=trading_data.get('high_volatility_threshold', 0.1),
+                default_model_name=config_data.get('model', {}).get('default_name', 'fin-r1'),
+                default_model_provider=config_data.get('model', {}).get('default_provider', 'ollama')
             )
 
     def get_token(self, symbol: str) -> TokenConfig:
@@ -184,18 +199,22 @@ class ConfigManager:
         """Validate all configuration is properly set."""
         try:
             # Validate required tokens exist
-            required_tokens = ["ETH", "USDC"]
+            required_tokens = ["ETH", "USDC", "WETH"]
             for token in required_tokens:
                 self.get_token(token)
 
             # Validate required contracts exist
-            required_contracts = ["UNISWAP_V3_ROUTER"]
+            required_contracts = ["UNISWAP_V4_UNIVERSAL_ROUTER"]
             for contract in required_contracts:
                 self.get_contract(contract)
 
             # Validate network configuration
-            if not self.settings.network.rpc_url:
-                raise ConfigurationError("RPC URL is required")
+            if not self.settings.network or not self.settings.network.rpc_url:
+                raise ConfigurationError("Network configuration with RPC URL is required")
+
+            # Validate trading configuration
+            if not self.settings.trading:
+                raise ConfigurationError("Trading configuration is required")
 
             return True
 
