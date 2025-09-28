@@ -1,108 +1,94 @@
 # ROOK Training Pipeline
 
-This directory contains the complete training pipeline for ROOK (Reasoning-Optimized Operations Kernel) trading agents.
+This directory contains the training pipeline for ROOK (Reasoning-Optimized Operations Kernel) trading agents.
 
 ## Overview
 
-ROOK agents are standalone PyTorch models trained for trading decisions:
+ROOK agents use LoRA fine-tuning of pre-trained language models for trading decisions:
 
-1. **Current Implementation**: LSTM-based supervised learning from heuristic labels
-2. **Future Enhancements**: Could be extended with transformer architectures or RL
+1. **Current Implementation**: LoRA fine-tuning of DialoGPT-medium model
+2. **Future Enhancements**: Could be extended with larger models or different base models
 
-**IMPORTANT**: This is NOT LoRA fine-tuning or parent model adaptation. We train
-standalone LSTM models from scratch using our trading data.
+**IMPORTANT**: This uses LoRA (Low-Rank Adaptation) fine-tuning to adapt pre-trained
+language models for financial trading decisions using our trading data.
 
 ## Directory Structure
 
 ```
 training/
-├── scripts/           # Training and data processing scripts
-│   ├── feature_pipeline.py    # Extract features from raw data
-│   ├── heuristics.py         # Generate trading action labels
-│   ├── dataset.py            # Create train/val/test splits
-│   └── train_rook.py         # Standalone model training script
+├── scripts/           # Training and deployment scripts
+│   ├── finr1_lora_train.py   # LoRA fine-tuning script
+│   ├── fluence_deploy.py     # Fluence cloud deployment
+│   ├── fluence_quickstart.sh # Quick deployment script
+│   ├── setup_linux_training.sh # Linux environment setup
+│   └── transfer_to_linux.sh # Transfer script for Linux machines
 ├── data/
-│   ├── processed/            # Processed datasets
-│   │   ├── core_features.csv
-│   │   ├── core_conditions.csv
-│   │   ├── labeled_dataset.csv
-│   │   ├── train.csv / val.csv / test.csv
-│   │   ├── metadata.json
-│   │   └── normalization.json
-│   └── raw/                  # Raw Uniswap data
-├── models/                   # Trained model artifacts
-│   └── {pair}/              # Per trading pair
-│       ├── best_model.pt     # Trained model weights
-│       ├── config.yaml       # Trading configuration
-│       └── norm.json         # Normalization parameters
+│   └── processed/            # Processed datasets (ready for training)
+│       ├── core_features.csv # Core trading features
+│       ├── core_conditions.csv # Market conditions
+│       ├── labeled_dataset.csv # Labeled training data
+│       ├── train.csv / val.csv / test.csv # Train/validation/test splits
+│       ├── metadata.json     # Dataset metadata
+│       └── normalization.json # Feature normalization parameters
+├── models/                   # Trained model artifacts (output directory)
 └── configs/                  # Training configurations
-    └── *.json               # Heuristic rule configs
+    ├── data_driven_heuristics.json # Trading rule parameters
+    └── relaxed_heuristics.json     # Relaxed trading rules
 ```
 
 ## Quick Start
 
-### 1. Data Preparation
+### 1. Local Training
 
 ```bash
-# Extract features from raw Uniswap data
-uv run python training/scripts/feature_pipeline.py \
-    --input data/raw/uniswap_v4_eth_usdc.csv \
-    --output training/data/processed
-
-# Generate trading labels using heuristics
-uv run python training/scripts/heuristics.py \
-    --features training/data/processed/core_features.csv \
-    --conditions training/data/processed/core_conditions.csv \
-    --output training/data/processed/labeled_dataset.csv \
-    --config training/configs/data_driven_heuristics.json
-
-# Create train/val/test splits
-uv run python training/scripts/dataset.py \
-    --labeled-data training/data/processed/labeled_dataset.csv \
-    --conditions training/data/processed/core_conditions.csv \
-    --output training/data/processed \
-    --seq-len 30
+# Train LoRA model locally
+uv run python training/scripts/finr1_lora_train.py \
+    --data-dir training/data/processed \
+    --output-dir training/models/finr1_lora \
+    --epochs 3 \
+    --max-samples 1000 \
+    --model microsoft/DialoGPT-medium
 ```
 
-### 2. Model Training
+### 2. Cloud Training (Fluence)
 
 ```bash
-# Train standalone ROOK model
-uv run python training/scripts/train_rook.py \
-    --data-dir training/data/processed \
-    --output-dir training/models/eth_usdc_500 \
-    --num-epochs 10 \
-    --batch-size 32 \
-    --hidden-dim 256
+# Quick deployment to Fluence cloud
+./training/scripts/fluence_quickstart.sh
+
+# Or manual deployment
+python training/scripts/fluence_deploy.py \
+    --ssh-key ~/.ssh/fluence_key.pub \
+    --ssh-private-key ~/.ssh/fluence_key \
+    --data-package fluence_training_package.tar.gz \
+    --output-dir ./fluence_results
 ```
 
 ### 3. Using Trained Models
 
 ```python
-from maharook.agents.rook.trained_brain import TrainedROOKBrain
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from peft import PeftModel
 
-# Load trained model
-brain = TrainedROOKBrain(
-    model_path="training/models/eth_usdc_500",
-    pair="ETH_USDC"
-)
+# Load LoRA fine-tuned model
+tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
+base_model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-medium")
+model = PeftModel.from_pretrained(base_model, "training/models/finr1_lora")
 
-# Make trading decisions
-action = brain.decide(features, portfolio_state, market_state)
+# Generate trading decisions
+inputs = tokenizer("Based on market data: price $3400, volume 150.0, volatility 0.002, should I buy or sell?", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=100)
+response = tokenizer.decode(outputs[0], skip_special_tokens=True)
 ```
 
 ## Data Flow
 
 ```
-Raw Uniswap Data → Feature Pipeline → Core Features + Conditions
-                                            ↓
-Trading Labels ← Heuristic Rules ← Feature Analysis
-       ↓
-Dataset Creation → Train/Val/Test Splits
-       ↓
-Model Training → Trained ROOK Agent
-       ↓
-Runtime Inference → Trading Actions
+Processed Trading Data → LoRA Fine-tuning Dataset
+                                ↓
+DialoGPT-medium + LoRA Adapters → Fine-tuned Model
+                                ↓
+Trading Prompts → Model Inference → Trading Decisions
 ```
 
 ## Feature Engineering
@@ -141,28 +127,34 @@ Runtime Inference → Trading Actions
 
 ## Model Architecture
 
-### PyTorch Implementation
-- **Core Encoder**: LSTM for sequence processing
-- **Condition Encoder**: Feed-forward network
-- **Fusion Layer**: Combined representation
-- **Multi-Head Output**: Side (classification) + Size/Slippage/Deadline (regression)
+### LoRA Fine-tuning Implementation
+- **Base Model**: DialoGPT-medium (117M parameters)
+- **LoRA Configuration**:
+  - Rank (r): 16
+  - Alpha: 32
+  - Target modules: ["c_attn", "c_proj"]
+  - Dropout: 0.1
+- **Task**: Causal language modeling for trading decisions
 
-### Loss Function
-```
-Total Loss = 2.0 * CrossEntropy(side) +
-             1.0 * Huber(size) +
-             1.0 * Huber(slippage) +
-             0.5 * Huber(deadline)
+### Training Configuration
+```python
+TrainingArguments(
+    num_train_epochs=3,
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=4,
+    learning_rate=1e-4,
+    use_cpu=True  # CPU-optimized training
+)
 ```
 
 ## Training Results
 
-Current ETH/USDC 500 bps model:
-- **Training Samples**: 6,979 sequences
-- **Validation Samples**: 1,496 sequences
-- **Test Samples**: 1,496 sequences
-- **Sequence Length**: 30 timesteps
-- **Action Distribution**: 78.7% HOLD, 11.5% SELL, 9.8% BUY
+Current LoRA fine-tuned model:
+- **Training Samples**: 1,000 (configurable via --max-samples)
+- **Base Model**: DialoGPT-medium
+- **Training Format**: Instruction-response pairs
+- **Action Distribution** (from underlying data): 78.7% HOLD, 11.5% SELL, 9.8% BUY
+- **Training Time**: ~5-10 minutes (CPU), faster on GPU
 
 ## Performance Monitoring
 
