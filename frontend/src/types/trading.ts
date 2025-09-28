@@ -26,9 +26,19 @@ export interface TradingUpdate {
   reasoning: string
 }
 
+export interface LogData {
+  agent_id: string
+  agent_name: string
+  level: string
+  message: string
+  timestamp: number
+  step?: number
+  data?: any
+}
+
 export interface WebSocketMessage {
-  type: 'agent_status' | 'trading_update'
-  data: AgentData | TradingUpdate
+  type: 'agent_status' | 'trading_update' | 'agent_log' | 'agent_discovered' | 'agent_removed'
+  data: AgentData | TradingUpdate | LogData | any
 }
 
 export interface AgentPosition {

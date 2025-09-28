@@ -21,7 +21,8 @@ const AgentOrb: React.FC<AgentOrbProps> = ({ agent, position, colors, recentTrad
   const [isTrading, setIsTrading] = useState(false)
 
   // Calculate NAV-based height (normalize between 0.5 and 3)
-  const navHeight = Math.max(0.5, Math.min(3, (agent.current_nav - 9000) / 2000 + 1))
+  // Adjusted for larger NAV values (e.g., $361k)
+  const navHeight = Math.max(0.5, Math.min(3, Math.log10(Math.max(1, agent.current_nav / 10000))))
 
   // Pulse effect when trading
   useEffect(() => {

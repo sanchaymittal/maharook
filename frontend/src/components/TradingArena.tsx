@@ -25,10 +25,26 @@ const AGENT_COLORS: AgentColors[] = [
 const TradingArena: React.FC<TradingArenaProps> = ({ agents, trades }) => {
   const groupRef = React.useRef<Group>(null)
 
-  // Debug logging
+  // Debug logging with error handling
   React.useEffect(() => {
-    console.log('TradingArena: agents=', agents.length, agents)
-    console.log('TradingArena: trades=', trades.length, trades)
+    try {
+      console.log('TradingArena: Rendering update')
+      console.log('TradingArena: agents=', agents.length, agents)
+      console.log('TradingArena: trades=', trades.length, trades)
+
+      // Check if agents data is valid
+      agents.forEach((agent, idx) => {
+        console.log(`Agent ${idx}:`, {
+          id: agent.agent_id,
+          name: agent.name,
+          status: agent.status,
+          nav: agent.current_nav,
+          trades: agent.total_trades
+        })
+      })
+    } catch (error) {
+      console.error('TradingArena: Error in debug logging:', error)
+    }
   }, [agents, trades])
 
   // Slowly rotate the entire arena
@@ -51,29 +67,47 @@ const TradingArena: React.FC<TradingArenaProps> = ({ agents, trades }) => {
 
       {/* Agent Orbs */}
       {agents.slice(0, 3).map((agent, index) => {
-        const position = AGENT_POSITIONS[index]
-        const colors = AGENT_COLORS[index]
-        const agentTrades = recentTrades.filter(trade => trade.agent_id === agent.agent_id)
+        try {
+          const position = AGENT_POSITIONS[index]
+          const colors = AGENT_COLORS[index]
+          const agentTrades = recentTrades.filter(trade => trade.agent_id === agent.agent_id)
 
-        return (
-          <AgentOrb
-            key={agent.agent_id}
-            agent={agent}
-            position={position}
-            colors={colors}
-            recentTrades={agentTrades}
-          />
-        )
+          console.log(`Rendering agent ${index}:`, {
+            id: agent.agent_id,
+            position,
+            colors,
+            trades: agentTrades.length
+          })
+
+          return (
+            <AgentOrb
+              key={agent.agent_id}
+              agent={agent}
+              position={position}
+              colors={colors}
+              recentTrades={agentTrades}
+            />
+          )
+        } catch (error) {
+          console.error(`Error rendering agent ${index}:`, error, agent)
+          return null
+        }
       })}
 
-      {/* Debug: Always visible orb */}
+      {/* Debug: Always visible orbs to ensure scene renders */}
       <mesh position={[0, 2, 0]}>
         <sphereGeometry args={[1, 32, 32]} />
         <meshStandardMaterial
           color="#ff0000"
           emissive="#ff0000"
-          emissiveIntensity={0.3}
+          emissiveIntensity={0.5}
         />
+      </mesh>
+
+      {/* Add a ground reference for visibility */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1, 0]}>
+        <planeGeometry args={[20, 20]} />
+        <meshStandardMaterial color="#1a1a2e" />
       </mesh>
 
       {/* Ambient Cosmic Effects */}

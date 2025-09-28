@@ -96,13 +96,13 @@ const AgentName = styled.div`
   align-items: center;
 `
 
-const StatusBadge = styled.span<{ status: string }>`
+const StatusBadge = styled.span<{ $status: string }>`
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 0.7rem;
   font-weight: bold;
   background: ${props => {
-    switch (props.status) {
+    switch (props.$status) {
       case 'running': return '#065f46'
       case 'stopped': return '#7f1d1d'
       case 'starting': return '#92400e'
@@ -111,7 +111,7 @@ const StatusBadge = styled.span<{ status: string }>`
     }
   }};
   color: ${props => {
-    switch (props.status) {
+    switch (props.$status) {
       case 'running': return '#10b981'
       case 'stopped': return '#ef4444'
       case 'starting': return '#f59e0b'
@@ -128,11 +128,11 @@ const Metric = styled.div`
   font-size: 0.85rem;
 `
 
-const MetricValue = styled.span<{ positive?: boolean }>`
+const MetricValue = styled.span<{ $positive?: boolean }>`
   font-weight: bold;
   color: ${props =>
-    props.positive === true ? '#10b981' :
-    props.positive === false ? '#ef4444' :
+    props.$positive === true ? '#10b981' :
+    props.$positive === false ? '#ef4444' :
     '#ffffff'
   };
 `
@@ -189,11 +189,14 @@ const ControlButton = styled.button`
 `
 
 const SidePanel: React.FC<SidePanelProps> = ({ agents, trades, logs = [] }) => {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(true)
+
+  // Debug logs
+  console.log('🔍 SidePanel received logs:', logs.length, logs.slice(0, 3))
 
   const startAgent = async (configPath: string) => {
     try {
-      const response = await fetch('http://localhost:8001/agents/start', {
+      const response = await fetch('http://localhost:8000/agents/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config_path: configPath, duration: 30 })
@@ -209,7 +212,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ agents, trades, logs = [] }) => {
 
   const stopAgent = async (agentId: string) => {
     try {
-      await fetch(`http://localhost:8001/agents/${agentId}/stop`, { method: 'POST' })
+      await fetch(`http://localhost:8000/agents/${agentId}/stop`, { method: 'POST' })
     } catch (error) {
       alert('Error stopping agent: ' + error)
     }
@@ -260,14 +263,14 @@ const SidePanel: React.FC<SidePanelProps> = ({ agents, trades, logs = [] }) => {
                   {index === 2 && '🥉 '}
                   {agent.name.replace('ROOK-', '')}
                 </span>
-                <StatusBadge status={agent.status}>
+                <StatusBadge $status={agent.status}>
                   {agent.status.toUpperCase()}
                 </StatusBadge>
               </AgentName>
 
               <Metric>
                 <span>Total PnL:</span>
-                <MetricValue positive={agent.total_pnl >= 0}>
+                <MetricValue $positive={agent.total_pnl >= 0}>
                   {agent.total_pnl >= 0 ? '+' : ''}${agent.total_pnl.toFixed(2)}
                 </MetricValue>
               </Metric>
@@ -333,9 +336,12 @@ const SidePanel: React.FC<SidePanelProps> = ({ agents, trades, logs = [] }) => {
         <Section>
           <SectionTitle>Live Logs ({logs.length})</SectionTitle>
           <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            {logs.slice(0, 20).map((log, index) => (
+            {logs.slice(0, 20).map((log, index) => {
+              // Debug each log
+              console.log('🎯 Rendering log:', index, log)
+              return (
               <div
-                key={`${log.agent_id || 'system'}-${log.timestamp}-${index}`}
+                key={`log-${log.timestamp || Date.now()}-${index}`}
                 style={{
                   padding: '8px',
                   margin: '4px 0',
@@ -380,7 +386,8 @@ const SidePanel: React.FC<SidePanelProps> = ({ agents, trades, logs = [] }) => {
                   </div>
                 )}
               </div>
-            ))}
+              )
+            })}
 
             {logs.length === 0 && (
               <div style={{ textAlign: 'center', opacity: 0.6, padding: '20px' }}>

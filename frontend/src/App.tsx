@@ -96,7 +96,7 @@ function App() {
   const [agents, setAgents] = useState<AgentData[]>([])
   const [trades, setTrades] = useState<TradingUpdate[]>([])
   const [logs, setLogs] = useState<any[]>([])
-  const { connected, latestMessage } = useWebSocket('ws://localhost:8002/ws')
+  const { connected, latestMessage } = useWebSocket('ws://localhost:8000/ws')
 
   useEffect(() => {
     if (!latestMessage) return
@@ -116,7 +116,12 @@ function App() {
       setTrades(prev => [tradeData, ...prev.slice(0, 49)]) // Keep last 50 trades
     } else if (latestMessage.type === 'agent_log') {
       const logData = latestMessage.data
-      setLogs(prev => [logData, ...prev.slice(0, 99)]) // Keep last 100 logs
+      console.log('📝 Adding log to state:', logData)
+      setLogs(prev => {
+        const newLogs = [logData, ...prev.slice(0, 99)]
+        console.log('📚 Total logs in state:', newLogs.length)
+        return newLogs
+      })
     } else if (latestMessage.type === 'agent_discovered') {
       const agentData = latestMessage.data
       setLogs(prev => [{
