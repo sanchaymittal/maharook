@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROOK Trading Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #0f1419;
+            color: #e6e6e6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .controls {
+            background: #1a1f29;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #2d3748;
+        }
+
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .agent-card {
+            background: #1a1f29;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .agent-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-running { background: #065f46; color: #10b981; }
+        .status-stopped { background: #7f1d1d; color: #ef4444; }
+        .status-starting { background: #92400e; color: #f59e0b; }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+        }
+
+        .metric-value {
+            font-weight: bold;
+        }
+
+        .positive { color: #10b981; }
+        .negative { color: #ef4444; }
+
+        .trades-log {
+            background: #1a1f29;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .trade-entry {
+            padding: 8px;
+            margin: 4px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .trade-buy { background: #065f46; }
+        .trade-sell { background: #7f1d1d; }
+        .trade-hold { background: #374151; }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        button:disabled {
+            background: #6b7280;
+            cursor: not-allowed;
+        }
+
+        select, input {
+            background: #374151;
+            color: #e6e6e6;
+            border: 1px solid #4b5563;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 5px;
+        }
+
+        .connection-status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .connected { background: #065f46; }
+        .disconnected { background: #7f1d1d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏰 ROOK Trading Dashboard</h1>
+            <div id="connectionStatus" class="connection-status disconnected">
+                Disconnected from server
+            </div>
+        </div>
+
+        <div class="controls">
+            <h3>Agent Control</h3>
+            <select id="configSelect">
+                <option value="run_agent/configs/rook_finr1_ollama.yaml">Fin-R1 Ollama (4.7GB)</option>
+                <option value="run_agent/configs/rook_qwen_ollama.yaml">Qwen2.5 Ollama (986MB)</option>
+                <option value="run_agent/configs/rook_qwen_lora.yaml">Qwen2.5 LoRA (Your Trained Model)</option>
+            </select>
+            <input type="number" id="durationInput" placeholder="Duration (minutes)" value="10" min="1" max="1440">
+            <button id="startBtn" onclick="startAgent()">Start Agent</button>
+            <button id="stopBtn" onclick="stopAgent()" disabled>Stop Agent</button>
+        </div>
+
+        <div class="agent-grid" id="agentGrid">
+            <!-- Agent cards will be populated dynamically -->
+        </div>
+
+        <div class="trades-log">
+            <h3>Live Trading Feed</h3>
+            <div id="tradesLog">
+                <div class="trade-entry">Waiting for trading updates...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let agents = {};
+        let selectedAgentId = null;
+
+        function connectWebSocket() {
+            const wsUrl = 'ws://localhost:8000/ws';
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function() {
+                console.log('Connected to ROOK tracking server');
+                updateConnectionStatus(true);
+            };
+
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                handleMessage(message);
+            };
+
+            ws.onclose = function() {
+                console.log('Disconnected from server');
+                updateConnectionStatus(false);
+                // Reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                updateConnectionStatus(false);
+            };
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (connected) {
+                statusEl.className = 'connection-status connected';
+                statusEl.textContent = 'Connected to ROOK tracking server';
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                statusEl.textContent = 'Disconnected from server - Reconnecting...';
+            }
+        }
+
+        function handleMessage(message) {
+            if (message.type === 'agent_status') {
+                updateAgentStatus(message.data);
+            } else if (message.type === 'trading_update') {
+                updateTradingFeed(message.data);
+            }
+        }
+
+        function updateAgentStatus(agentData) {
+            agents[agentData.agent_id] = agentData;
+            renderAgentGrid();
+        }
+
+        function updateTradingFeed(tradeData) {
+            const log = document.getElementById('tradesLog');
+            const entry = document.createElement('div');
+            entry.className = `trade-entry trade-${tradeData.action.toLowerCase()}`;
+
+            const timestamp = new Date(tradeData.timestamp * 1000).toLocaleTimeString();
+            const pnlClass = tradeData.pnl >= 0 ? 'positive' : 'negative';
+
+            entry.innerHTML = `
+                [${timestamp}] ${tradeData.agent_id.split('_')[1]} |
+                ${tradeData.action} ${tradeData.amount_eth.toFixed(6)} ETH @ $${tradeData.price.toFixed(2)} |
+                PnL: <span class="${pnlClass}">$${tradeData.pnl.toFixed(2)}</span> |
+                NAV: $${tradeData.nav.toFixed(2)}
+                ${tradeData.tx_hash ? ` | TX: ${tradeData.tx_hash.substring(0, 10)}...` : ''}
+            `;
+
+            log.insertBefore(entry, log.firstChild);
+
+            // Keep only last 50 entries
+            while (log.children.length > 50) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        function renderAgentGrid() {
+            const grid = document.getElementById('agentGrid');
+            grid.innerHTML = '';
+
+            Object.values(agents).forEach(agent => {
+                const card = document.createElement('div');
+                card.className = 'agent-card';
+
+                const runtime = Math.floor((Date.now() / 1000 - agent.start_time) / 60);
+                const pnlClass = agent.total_pnl >= 0 ? 'positive' : 'negative';
+
+                card.innerHTML = `
+                    <div class="agent-header">
+                        <h4>${agent.name}</h4>
+                        <span class="status-badge status-${agent.status}">${agent.status.toUpperCase()}</span>
+                    </div>
+                    <div class="metric">
+                        <span>Runtime:</span>
+                        <span class="metric-value">${runtime} min</span>
+                    </div>
+                    <div class="metric">
+                        <span>Steps:</span>
+                        <span class="metric-value">${agent.total_steps}</span>
+                    </div>
+                    <div class="metric">
+                        <span>Trades:</span>
+                        <span class="metric-value">${agent.total_trades}</span>
+                    </div>
+                    <div class="metric">
+                        <span>NAV:</span>
+                        <span class="metric-value">$${agent.current_nav.toFixed(2)}</span>
+                    </div>
+                    <div class="metric">
+                        <span>Total PnL:</span>
+                        <span class="metric-value ${pnlClass}">$${agent.total_pnl.toFixed(2)}</span>
+                    </div>
+                    <button onclick="stopSpecificAgent('${agent.agent_id}')"
+                            ${agent.status !== 'running' ? 'disabled' : ''}>
+                        Stop Agent
+                    </button>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        async function startAgent() {
+            const config = document.getElementById('configSelect').value;
+            const duration = parseInt(document.getElementById('durationInput').value);
+
+            const startBtn = document.getElementById('startBtn');
+            startBtn.disabled = true;
+            startBtn.textContent = 'Starting...';
+
+            try {
+                const response = await fetch('http://localhost:8000/agents/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config_path: config, duration: duration })
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    alert('Error starting agent: ' + result.error);
+                } else {
+                    selectedAgentId = result.agent_id;
+                    document.getElementById('stopBtn').disabled = false;
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start Agent';
+            }
+        }
+
+        async function stopAgent() {
+            if (!selectedAgentId) return;
+            await stopSpecificAgent(selectedAgentId);
+        }
+
+        async function stopSpecificAgent(agentId) {
+            try {
+                await fetch(`http://localhost:8000/agents/${agentId}/stop`, { method: 'POST' });
+                if (agentId === selectedAgentId) {
+                    document.getElementById('stopBtn').disabled = true;
+                    selectedAgentId = null;
+                }
+            } catch (error) {
+                alert('Error stopping agent: ' + error.message);
+            }
+        }
+
+        // Initialize
+        connectWebSocket();
+    </script>
+</body>
+</html>
