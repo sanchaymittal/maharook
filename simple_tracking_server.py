@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-ROOK Trading Tracking Server
----------------------------
-WebSocket-based real-time tracking for ROOK agents with frontend integration.
+Simple ROOK Trading Tracking Server - For WebSocket testing
 """
 
 import asyncio
@@ -19,7 +17,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from maharook.core.agent_registry import get_agent_registry, AgentState
 from run_rook_models import RookModelRunner
 
 
@@ -92,8 +89,8 @@ class ConnectionManager:
             self.disconnect(connection)
 
 
-class RookTrackingServer:
-    """Main tracking server for ROOK agents."""
+class SimpleTrackingServer:
+    """Simple tracking server for ROOK agents."""
 
     def __init__(self):
         self.app = FastAPI(title="ROOK Trading Tracker", version="1.0.0")
@@ -101,7 +98,6 @@ class RookTrackingServer:
         self.agents: Dict[str, AgentStatus] = {}
         self.agent_runners: Dict[str, RookModelRunner] = {}
         self.agent_tasks: Dict[str, asyncio.Task] = {}
-        self.registry = get_agent_registry()
 
         self._setup_routes()
         self._setup_cors()
@@ -323,115 +319,9 @@ class RookTrackingServer:
         if agent_id in self.agent_runners:
             del self.agent_runners[agent_id]
 
-    def _start_registry_monitor(self):
-        """Start background task to monitor agent registry."""
-        asyncio.create_task(self._registry_monitor_loop())
-
-    async def _registry_monitor_loop(self):
-        """Monitor agent registry for external agents and broadcast updates."""
-        known_agents = set()
-
-        while True:
-            try:
-                # Get current agents from registry
-                registry_agents = self.registry.list_agents()
-                current_agents = {agent.agent_id for agent in registry_agents}
-
-                # Find new agents
-                new_agents = current_agents - known_agents
-                for agent_state in registry_agents:
-                    if agent_state.agent_id in new_agents:
-                        logger.info("📡 Discovered new agent: {} ({})", agent_state.name, agent_state.agent_id)
-                        # Convert to AgentStatus format for compatibility
-                        agent_status = AgentStatus(
-                            agent_id=agent_state.agent_id,
-                            name=agent_state.name,
-                            config_path=agent_state.config_path,
-                            status=agent_state.status,
-                            start_time=int(agent_state.start_time),
-                            last_update=int(agent_state.last_update),
-                            total_steps=agent_state.total_steps,
-                            total_trades=agent_state.total_trades,
-                            current_nav=agent_state.current_nav,
-                            total_pnl=agent_state.total_pnl
-                        )
-                        self.agents[agent_state.agent_id] = agent_status
-                        await self._broadcast_agent_update(agent_state.agent_id)
-
-                # Update existing agents and broadcast trading updates
-                for agent_state in registry_agents:
-                    if agent_state.agent_id in self.agents:
-                        # Check if state has changed since last update
-                        current_status = self.agents[agent_state.agent_id]
-                        if (agent_state.last_update > current_status.last_update or
-                            agent_state.total_steps > current_status.total_steps):
-
-                            # Update status
-                            current_status.status = agent_state.status
-                            current_status.current_nav = agent_state.current_nav
-                            current_status.total_pnl = agent_state.total_pnl
-                            current_status.total_trades = agent_state.total_trades
-                            current_status.total_steps = agent_state.total_steps
-                            current_status.last_update = int(agent_state.last_update)
-
-                            # Broadcast agent status update
-                            await self._broadcast_agent_update(agent_state.agent_id)
-
-                            # If there's trading activity, broadcast trading update
-                            if (agent_state.last_action and
-                                agent_state.last_amount is not None and
-                                agent_state.last_price is not None):
-
-                                trading_update = TradingUpdate(
-                                    agent_id=agent_state.agent_id,
-                                    pair=agent_state.pair,
-                                    step=agent_state.total_steps,
-                                    action=agent_state.last_action,
-                                    amount_eth=agent_state.last_amount,
-                                    price=agent_state.last_price,
-                                    tx_hash=f"0x{uuid.uuid4().hex[:10]}...",  # Mock hash
-                                    pnl=agent_state.total_pnl,
-                                    nav=agent_state.current_nav,
-                                    timestamp=int(agent_state.last_update),
-                                    confidence=agent_state.last_confidence or 0.0,
-                                    reasoning=agent_state.last_reasoning or ""
-                                )
-
-                                logger.info("📡 Broadcasting trading update: {} {} {:.4f} ETH",
-                                          trading_update.action, trading_update.pair, trading_update.amount_eth)
-
-                                await self.connection_manager.broadcast({
-                                    "type": "trading_update",
-                                    "data": trading_update.to_dict()
-                                })
-
-                # Update known agents
-                known_agents = current_agents
-
-                # Remove agents that are no longer in registry
-                removed_agents = set(self.agents.keys()) - current_agents
-                for agent_id in removed_agents:
-                    if agent_id in self.agents:
-                        logger.info("🗑️ Agent {} removed from tracking", agent_id)
-                        del self.agents[agent_id]
-
-            except Exception as e:
-                logger.error("❌ Error in registry monitor: {}", e)
-
-            # Check every 2 seconds
-            await asyncio.sleep(2)
-
-    def run(self, host: str = "0.0.0.0", port: int = 8000):
+    def run(self, host: str = "0.0.0.0", port: int = 8001):
         """Run the tracking server."""
-        logger.info("🚀 Starting ROOK Tracking Server on {}:{}", host, port)
-
-        # Add lifespan event to start registry monitoring
-        @self.app.on_event("startup")
-        async def startup_event():
-            # Start registry monitoring
-            asyncio.create_task(self._registry_monitor_loop())
-            logger.info("🔄 Registry monitoring started")
-
+        logger.info("🚀 Starting Simple ROOK Tracking Server on {}:{}", host, port)
         uvicorn.run(self.app, host=host, port=port, log_level="info")
 
 
@@ -439,13 +329,13 @@ def main():
     """CLI entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="ROOK Trading Tracking Server")
+    parser = argparse.ArgumentParser(description="Simple ROOK Trading Tracking Server")
     parser.add_argument("--host", default="0.0.0.0", help="Server host")
-    parser.add_argument("--port", type=int, default=8000, help="Server port")
+    parser.add_argument("--port", type=int, default=8001, help="Server port")
 
     args = parser.parse_args()
 
-    server = RookTrackingServer()
+    server = SimpleTrackingServer()
     server.run(host=args.host, port=args.port)
 
 

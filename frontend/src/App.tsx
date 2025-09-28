@@ -95,7 +95,8 @@ const ConnectionStatus = styled.div<{ connected: boolean }>`
 function App() {
   const [agents, setAgents] = useState<AgentData[]>([])
   const [trades, setTrades] = useState<TradingUpdate[]>([])
-  const { connected, latestMessage } = useWebSocket('ws://localhost:8001/ws')
+  const [logs, setLogs] = useState<any[]>([])
+  const { connected, latestMessage } = useWebSocket('ws://localhost:8002/ws')
 
   useEffect(() => {
     if (!latestMessage) return
@@ -113,6 +114,17 @@ function App() {
     } else if (latestMessage.type === 'trading_update') {
       const tradeData = latestMessage.data as TradingUpdate
       setTrades(prev => [tradeData, ...prev.slice(0, 49)]) // Keep last 50 trades
+    } else if (latestMessage.type === 'agent_log') {
+      const logData = latestMessage.data
+      setLogs(prev => [logData, ...prev.slice(0, 99)]) // Keep last 100 logs
+    } else if (latestMessage.type === 'agent_discovered') {
+      const agentData = latestMessage.data
+      setLogs(prev => [{
+        level: 'INFO',
+        message: `🚀 New agent discovered: ${agentData.name}`,
+        timestamp: agentData.timestamp,
+        agent_name: agentData.name
+      }, ...prev.slice(0, 99)])
     }
   }, [latestMessage])
 
@@ -165,7 +177,7 @@ function App() {
           {connected ? '🟢 LIVE' : '🔴 OFFLINE'}
         </ConnectionStatus>
 
-        <SidePanel agents={agents} trades={trades} />
+        <SidePanel agents={agents} trades={trades} logs={logs} />
       </UIOverlay>
     </AppContainer>
   )

@@ -5,6 +5,7 @@ import { AgentData, TradingUpdate } from '../types/trading'
 interface SidePanelProps {
   agents: AgentData[]
   trades: TradingUpdate[]
+  logs?: any[]
 }
 
 const Panel = styled.div<{ isOpen: boolean }>`
@@ -187,7 +188,7 @@ const ControlButton = styled.button`
   }
 `
 
-const SidePanel: React.FC<SidePanelProps> = ({ agents, trades }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ agents, trades, logs = [] }) => {
   const [isOpen, setIsOpen] = useState(false)
 
   const startAgent = async (configPath: string) => {
@@ -324,6 +325,66 @@ const SidePanel: React.FC<SidePanelProps> = ({ agents, trades }) => {
             {trades.length === 0 && (
               <div style={{ textAlign: 'center', opacity: 0.6, padding: '20px' }}>
                 No trades yet. Waiting for agents...
+              </div>
+            )}
+          </div>
+        </Section>
+
+        <Section>
+          <SectionTitle>Live Logs ({logs.length})</SectionTitle>
+          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            {logs.slice(0, 20).map((log, index) => (
+              <div
+                key={`${log.agent_id || 'system'}-${log.timestamp}-${index}`}
+                style={{
+                  padding: '8px',
+                  margin: '4px 0',
+                  borderRadius: '4px',
+                  borderLeft: `3px solid ${
+                    log.level === 'SUCCESS' ? '#10b981' :
+                    log.level === 'ERROR' ? '#ef4444' :
+                    log.level === 'WARNING' ? '#f59e0b' :
+                    '#6b7280'
+                  }`,
+                  background: `${
+                    log.level === 'SUCCESS' ? 'rgba(16, 185, 129, 0.1)' :
+                    log.level === 'ERROR' ? 'rgba(239, 68, 68, 0.1)' :
+                    log.level === 'WARNING' ? 'rgba(245, 158, 11, 0.1)' :
+                    'rgba(107, 114, 128, 0.1)'
+                  }`,
+                  fontSize: '0.8rem'
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '4px'
+                }}>
+                  <span style={{ fontWeight: 'bold', opacity: 0.8 }}>
+                    {log.agent_name || 'System'}
+                  </span>
+                  <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>
+                    {new Date(log.timestamp * 1000).toLocaleTimeString()}
+                  </span>
+                </div>
+                <div>{log.message}</div>
+                {log.data && log.data.reasoning && (
+                  <div style={{
+                    fontSize: '0.7rem',
+                    opacity: 0.7,
+                    marginTop: '4px',
+                    fontStyle: 'italic'
+                  }}>
+                    💭 {log.data.reasoning}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {logs.length === 0 && (
+              <div style={{ textAlign: 'center', opacity: 0.6, padding: '20px' }}>
+                No logs yet. Waiting for agents...
               </div>
             )}
           </div>
