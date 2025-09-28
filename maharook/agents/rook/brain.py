@@ -146,17 +146,33 @@ class Brain:
         """Initialize Transformers model with optional LoRA adapter."""
         try:
             # Load base model and tokenizer
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                torch_dtype=torch.float16,
-                device_map="auto"
-            )
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=True)
+            # Use different parameters for LoRA models to avoid loading issues
+            if self.adapter_path:
+                # More compatible settings for LoRA loading
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch.float32,
+                    device_map="cpu",
+                    trust_remote_code=True
+                )
+            else:
+                # Standard settings for non-LoRA models
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch.float16,
+                    device_map="auto"
+                )
 
             # Load LoRA adapter if specified
             if self.adapter_path and PeftModel is not None:
                 logger.info("Loading LoRA adapter from {}", self.adapter_path)
-                self.model = PeftModel.from_pretrained(self.model, self.adapter_path)
+                self.model = PeftModel.from_pretrained(
+                    self.model,
+                    self.adapter_path,
+                    torch_dtype=torch.float32,
+                    device_map="cpu"
+                )
 
             logger.info("Transformers model initialized successfully")
 
