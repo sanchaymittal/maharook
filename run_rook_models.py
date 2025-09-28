@@ -7,6 +7,7 @@ Runs ROOK agents with different model configurations using the MAHAROOK framewor
 
 import argparse
 import asyncio
+import os
 import time
 from pathlib import Path
 from typing import Dict, List
@@ -18,6 +19,7 @@ from maharook.agents.rook.agent import RookAgent, RookConfig
 from maharook.agents.rook.brain import MarketFeatures
 from maharook.blockchain.client import BaseClient
 from maharook.core.config import settings
+from maharook.core.agent_registry import AgentRegistry, AgentState, get_agent_registry
 
 
 class RookModelRunner:
@@ -27,6 +29,10 @@ class RookModelRunner:
         self.config_path = Path(config_path)
         self.config = self._load_config()
         self.agent = None
+        self.agent_id = None
+        self.registry = get_agent_registry()
+        self.total_steps = 0
+        self.total_trades = 0
 
     def _load_config(self) -> Dict:
         """Load configuration from YAML file."""
@@ -111,6 +117,33 @@ class RookModelRunner:
         # Initialize agent
         self.agent = self.create_rook_agent()
 
+        # Generate unique agent ID and register
+        self.agent_id = f"rook_{self.agent.config.pair.lower()}_{int(time.time())}"
+
+        # Create agent state for registry
+        agent_state = AgentState(
+            agent_id=self.agent_id,
+            name=self.agent.name,
+            config_path=str(self.config_path),
+            model_type=self.config.get("model", {}).get("type", "unknown"),
+            model_name=self.config.get("model", {}).get("name", "unknown"),
+            pair=self.agent.config.pair,
+            status="starting",
+            pid=os.getpid(),
+            start_time=time.time(),
+            last_update=time.time(),
+            total_steps=0,
+            total_trades=0,
+            current_nav=20000.0,  # Default starting capital
+            total_pnl=0.0
+        )
+
+        # Register agent
+        self.registry.register_agent(agent_state)
+
+        # Update status to running
+        self.registry.update_agent(self.agent_id, status="running")
+
         # Run trading loop
         start_time = time.time()
         end_time = start_time + (duration_minutes * 60)
@@ -119,12 +152,35 @@ class RookModelRunner:
         try:
             while time.time() < end_time:
                 step_count += 1
+                self.total_steps = step_count
 
                 # Get market data
                 market_features = self.simulate_market_data()
 
                 # Agent step
                 state = self.agent.step(market_features)
+
+                # Update registry with current state
+                updates = {
+                    "total_steps": step_count,
+                    "current_nav": state.portfolio_state.total_value_usd,
+                    "total_pnl": state.portfolio_state.total_value_usd - 20000.0,  # PnL vs starting capital
+                    "last_update": time.time()
+                }
+
+                # Track trading actions
+                if state.last_action:
+                    updates["last_action"] = state.last_action.side
+                    updates["last_amount"] = state.last_action.size
+                    updates["last_price"] = market_features.price
+                    updates["last_confidence"] = getattr(state.last_action, 'confidence', 0.0)
+                    updates["last_reasoning"] = getattr(state.last_action, 'reasoning', '')
+
+                    if state.last_action.side in ["BUY", "SELL"]:
+                        self.total_trades += 1
+                        updates["total_trades"] = self.total_trades
+
+                self.registry.update_agent(self.agent_id, **updates)
 
                 # Log progress
                 if step_count % 10 == 0:
@@ -141,15 +197,26 @@ class RookModelRunner:
 
         except KeyboardInterrupt:
             logger.info("Trading session stopped by user after {} steps", step_count)
+            self.registry.update_agent(self.agent_id, status="stopped")
         except Exception as e:
             logger.error("Trading session failed: {}", e)
+            self.registry.update_agent(self.agent_id, status="error")
             raise
+        finally:
+            # Mark as completed
+            if self.agent_id:
+                self.registry.update_agent(self.agent_id, status="completed", last_update=time.time())
 
         logger.success("✅ Trading session completed: {} steps", step_count)
 
         # Generate final report
         if self.agent:
             await self._generate_report()
+
+        # Unregister after delay to allow tracking server to see completion
+        await asyncio.sleep(30)
+        if self.agent_id:
+            self.registry.unregister_agent(self.agent_id)
 
     async def _generate_report(self):
         """Generate performance report."""
