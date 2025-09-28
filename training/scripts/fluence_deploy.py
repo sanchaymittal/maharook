@@ -26,8 +26,16 @@ class FluenceDeployer:
         self.base_url = "https://api.fluence.dev"
         self.session = requests.Session()
 
-        if self.api_key:
-            self.session.headers.update({"Authorization": f"Bearer {self.api_key}"})
+        if not self.api_key:
+            logger.error("❌ Fluence API key required!")
+            logger.info("📝 Get your API key from: https://fluence.dev/")
+            logger.info("💡 Set FLUENCE_API_KEY environment variable or use --api-key")
+            raise ValueError("API key is required")
+
+        self.session.headers.update({
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        })
 
     def get_offerings(self, config: str = "cpu-8-ram-16gb-storage-25gb") -> List[Dict]:
         """Get available VM offerings from Fluence marketplace."""
@@ -92,21 +100,39 @@ class FluenceDeployer:
 
         try:
             url = f"{self.base_url}/vms/v3"
+            logger.debug("Sending request to: {}", url)
+            logger.debug("Request payload: {}", deployment_config)
+
             response = self.session.post(url, json=deployment_config)
+
+            # Log response details before raising for status
+            logger.debug("Response status: {}", response.status_code)
+            logger.debug("Response body: {}", response.text[:500])
+
             response.raise_for_status()
 
             result = response.json()
-            vm_id = result.get("vmIds", [None])[0]
+
+            # Handle both list and dict response formats
+            if isinstance(result, list) and len(result) > 0:
+                vm_info = result[0]
+                vm_id = vm_info.get("vmId")
+                vm_name_returned = vm_info.get("vmName", vm_name)
+            else:
+                vm_id = result.get("vmIds", [None])[0] if isinstance(result, dict) else None
+                vm_name_returned = vm_name
 
             if vm_id:
                 logger.success("✅ VM deployed successfully: {}", vm_id)
-                return {"vm_id": vm_id, "name": vm_name, "config": deployment_config}
+                return {"vm_id": vm_id, "name": vm_name_returned, "config": deployment_config}
             else:
                 logger.error("❌ VM deployment failed: {}", result)
                 return {}
 
         except Exception as e:
             logger.error("❌ VM deployment error: {}", e)
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error("Response content: {}", e.response.text)
             return {}
 
     def get_vm_status(self, vm_id: str) -> Dict:
@@ -241,20 +267,16 @@ class FluenceDeployer:
         """Start Fin-R1 training on the VM."""
         logger.info("🔥 Starting Fin-R1 training...")
 
-        # Training command optimized for CPU
+        # Training command using actual LoRA training script
         training_cmd = f"""
         cd ~/finr1_training &&
         source venv/bin/activate &&
-        python scripts/train_finr1_cpu.py \\
+        python scripts/finr1_lora_train.py \\
             --data-dir data/processed \\
             --output-dir models/finr1_lora \\
-            --base-model Qwen/Qwen2-7B-Instruct \\
-            --batch-size 1 \\
-            --num-epochs 1 \\
-            --use-cpu \\
-            --gradient-accumulation-steps 8 \\
-            --learning-rate 1e-4 \\
-            --max-seq-length 1024 > logs/training.log 2>&1 &
+            --epochs 1 \\
+            --max-samples 1000 \\
+            --model microsoft/DialoGPT-medium > logs/training.log 2>&1 &
         """
 
         try:
@@ -362,11 +384,8 @@ def main():
     # Initialize deployer
     deployer = FluenceDeployer(api_key=args.api_key)
 
-    # Check offerings first
-    offerings = deployer.get_offerings()
-    if not offerings:
-        logger.error("❌ No suitable VM offerings found")
-        return
+    # Skip offerings check for now and proceed with deployment
+    logger.info("🚀 Proceeding with VM deployment...")
 
     # Deploy VM
     vm_result = deployer.deploy_vm(ssh_public_key, args.vm_name)

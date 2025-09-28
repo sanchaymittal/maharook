@@ -32,7 +32,7 @@ if [ ! -f fluence_training_package.tar.gz ]; then
     echo "📦 Creating training package..."
     tar -czf fluence_training_package.tar.gz \
         training/data/processed/ \
-        training/scripts/train_finr1_cpu.py \
+        training/scripts/finr1_lora_train.py \
         training/scripts/fluence_deploy.py \
         training/configs/ \
         training/FLUENCE_DEPLOYMENT_GUIDE.md
@@ -114,7 +114,7 @@ elif [ "$option" = "2" ]; then
     echo "7. 🔥 Start training:"
     echo "   cd ~/finr1_training"
     echo "   # Setup environment as per guide"
-    echo "   python3 scripts/train_finr1_cpu.py --data-dir data/processed --output-dir models/finr1_lora"
+    echo "   python3 scripts/finr1_lora_train.py --data-dir data/processed --output-dir models/finr1_lora"
     echo ""
     echo "8. 📥 Retrieve results when complete:"
     echo "   scp -i ~/.ssh/fluence_key ubuntu@<VM_IP>:~/finr1_training/models/finr1_lora.tar.gz ./"
