@@ -7,11 +7,21 @@ Composition-based trading agent that combines Brain, Portfolio, and Executor com
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from loguru import logger
 
 from maharook.core.config import settings
+from maharook.core.logging import (
+    log,
+    set_agent_id,
+    set_step,
+    set_trace_id,
+    generate_trace_id,
+    with_trace_id,
+    log_trade_execution,
+    log_agent_step,
+)
 from .brain import Brain, MarketFeatures, TradingAction
 from .executor import ExecutionResult, Executor
 from .portfolio import Portfolio, PortfolioState
@@ -23,13 +33,13 @@ class RookConfig:
     """Configuration for a ROOK agent."""
     # Trading pair
     pair: str = settings.trading.default_pair
-    pool_id: str | None = None
+    pool_id: Optional[str] = None
     fee_tier: float = settings.trading.default_fee_tier
 
     # Model configuration
     model_name: str = settings.trading.default_model_name
     model_provider: str = settings.trading.default_model_provider
-    adapter_path: str | None = None
+    adapter_path: Optional[str] = None
 
     # Portfolio settings
     target_allocation: float = settings.trading.default_target_allocation
@@ -54,9 +64,9 @@ class RookState:
     timestamp: datetime
     portfolio_state: PortfolioState
     market_features: MarketFeatures
-    last_action: TradingAction | None = None
-    last_execution: ExecutionResult | None = None
-    performance_summary: dict[str, Any] | None = None
+    last_action: Optional[TradingAction] = None
+    last_execution: Optional[ExecutionResult] = None
+    performance_summary: Optional[dict[str, Any]] = None
 
 
 class RookAgent:
@@ -72,9 +82,9 @@ class RookAgent:
     def __init__(
         self,
         config: RookConfig,
-        client=None,
-        swapper: UniswapV4Swapper | None = None
-    ):
+        client: Optional[Any] = None,
+        swapper: Optional[UniswapV4Swapper] = None
+    ) -> None:
         """Initialize ROOK agent.
 
         Args:
@@ -92,18 +102,23 @@ class RookAgent:
         self._initialize_executor(swapper)
 
         # State tracking
-        self.current_state: RookState | None = None
-        self.step_count = 0
-        self.start_time = datetime.now()
+        self.current_state: Optional[RookState] = None
+        self.step_count: int = 0
+        self.start_time: datetime = datetime.now()
+        self.trace_id: str = generate_trace_id()
 
-        logger.info(
+        # Set agent context for structured logging
+        set_agent_id(self.agent_id)
+        set_trace_id(self.trace_id)
+
+        log.info(
             "ROOK Agent initialized: {} (pair: {}, model: {})",
             self.agent_id,
             config.pair,
             config.model_name
         )
 
-    def _initialize_brain(self):
+    def _initialize_brain(self) -> None:
         """Initialize the Brain component."""
         brain_config = {
             "openrouter_api_key": None,  # Would load from environment
@@ -118,7 +133,7 @@ class RookAgent:
             config=brain_config
         )
 
-    def _initialize_portfolio(self):
+    def _initialize_portfolio(self) -> None:
         """Initialize the Portfolio component."""
         self.portfolio = Portfolio(
             target_eth_allocation=self.config.target_allocation,
@@ -131,7 +146,7 @@ class RookAgent:
         self.portfolio.max_position_size = self.config.max_position_size
         self.portfolio.max_daily_trades = self.config.max_daily_trades
 
-    def _initialize_executor(self, swapper: UniswapV4Swapper | None):
+    def _initialize_executor(self, swapper: Optional[UniswapV4Swapper]) -> None:
         """Initialize the Executor component."""
         if swapper is None:
             swapper = UniswapV4Swapper(client=self.client)
@@ -146,7 +161,8 @@ class RookAgent:
 
         self.executor = Executor(swapper=swapper, config=executor_config)
 
-    def step(self, market_features: MarketFeatures, market_context: dict[str, Any] | None = None) -> RookState:
+    @with_trace_id
+    def step(self, market_features: MarketFeatures, market_context: Optional[dict[str, Any]] = None) -> RookState:
         """Execute one trading step.
 
         Args:
@@ -159,8 +175,12 @@ class RookAgent:
         self.step_count += 1
         step_start = time.time()
 
+        # Set step context for structured logging
+        set_agent_id(self.agent_id)
+        set_step(self.step_count)
+
         try:
-            logger.debug("ROOK step {} starting", self.step_count)
+            log.debug("ROOK step {} starting", self.step_count)
 
             # Update portfolio from blockchain if client available
             if self.client:
@@ -175,7 +195,7 @@ class RookAgent:
             # Check if trade is allowed by risk limits
             risk_check = self._check_risk_limits(market_features, portfolio_state)
             if not risk_check[0]:
-                logger.warning("Trade blocked by risk limits: {}", risk_check[1])
+                log.warning("Trade blocked by risk limits: {}", risk_check[1])
                 action = TradingAction(
                     side="HOLD",
                     size=0.0,
@@ -200,6 +220,16 @@ class RookAgent:
                 if execution.success and execution.trade:
                     self.portfolio.record_trade(execution.trade)
 
+                    # Log trade execution with structured logging
+                    log_trade_execution(
+                        agent_id=self.agent_id,
+                        action=action.side,
+                        amount=action.size,
+                        price=market_features.price,
+                        confidence=action.confidence,
+                        reasoning=action.reasoning,
+                    )
+
             # Update current state
             self.current_state = RookState(
                 timestamp=datetime.now(),
@@ -211,25 +241,33 @@ class RookAgent:
             )
 
             step_duration = time.time() - step_start
-            logger.info(
-                "ROOK step {} completed: {} {:.6f} ETH in {:.3f}s",
-                self.step_count,
-                action.side,
-                action.size,
-                step_duration
+
+            # Use structured logging for step completion
+            log_agent_step(
+                agent_id=self.agent_id,
+                step=self.step_count,
+                action=action.side,
+                amount=action.size,
+                duration=step_duration,
+                portfolio_value=portfolio_state.total_value_usd,
             )
 
             return self.current_state
 
         except Exception as e:
-            logger.error("ROOK step {} failed: {}", self.step_count, e)
+            log.error("ROOK step {} failed: {}", self.step_count, e)
             raise
 
     def _check_risk_limits(self, market_features: MarketFeatures, portfolio_state: PortfolioState) -> tuple[bool, str]:
         """Check if trading is allowed by risk limits."""
+        # Get thresholds from configuration
+        from maharook.core.config import config_manager
+        trading_config = config_manager.settings.trading
+
         # Basic portfolio value check
-        if portfolio_state.total_value_usd < 10:  # Minimum $10
-            return False, "Portfolio value too low"
+        min_value = trading_config.min_portfolio_value_usd if trading_config else 10.0
+        if portfolio_state.total_value_usd < min_value:
+            return False, f"Portfolio value ${portfolio_state.total_value_usd:.2f} below minimum ${min_value:.2f}"
 
         # Check maximum drawdown
         performance = self.portfolio.calculate_performance()
@@ -237,8 +275,9 @@ class RookAgent:
             return False, f"Maximum drawdown exceeded: {performance.max_drawdown:.1%}"
 
         # Check volatility limits
-        if market_features.volatility > 0.1:  # 10% volatility threshold
-            return False, f"Market volatility too high: {market_features.volatility:.1%}"
+        volatility_threshold = trading_config.high_volatility_threshold if trading_config else 0.1
+        if market_features.volatility > volatility_threshold:
+            return False, f"Market volatility {market_features.volatility:.1%} exceeds threshold {volatility_threshold:.1%}"
 
         return True, "Trading allowed"
 
@@ -280,7 +319,7 @@ class RookAgent:
             }
         }
 
-    def update_config(self, new_config: dict[str, Any]):
+    def update_config(self, new_config: dict[str, Any]) -> None:
         """Update agent configuration."""
         # Update internal config
         for key, value in new_config.items():
@@ -294,9 +333,9 @@ class RookAgent:
         if "executor_config" in new_config:
             self.executor.update_config(new_config["executor_config"])
 
-        logger.info("ROOK configuration updated")
+        log.info("ROOK configuration updated")
 
-    def save_state(self, filepath: str):
+    def save_state(self, filepath: str) -> None:
         """Save agent state to file."""
         import json
 
@@ -311,10 +350,10 @@ class RookAgent:
         with open(filepath, 'w') as f:
             json.dump(state_data, f, indent=2, default=str)
 
-        logger.info("ROOK state saved to {}", filepath)
+        log.info("ROOK state saved to {}", filepath)
 
     @classmethod
-    def load_from_config_file(cls, config_path: str, client=None) -> 'RookAgent':
+    def load_from_config_file(cls, config_path: str, client: Optional[Any] = None) -> 'RookAgent':
         """Load ROOK agent from configuration file."""
         import json
 
@@ -324,7 +363,7 @@ class RookAgent:
         config = RookConfig(**config_data)
         return cls(config=config, client=client)
 
-    def run_autonomous(self, market_data_source, duration_hours: int = 24, step_interval: int = 30):
+    def run_autonomous(self, market_data_source: Any, duration_hours: int = 24, step_interval: int = 30) -> None:
         """Run agent autonomously for specified duration.
 
         Args:
@@ -334,7 +373,7 @@ class RookAgent:
         """
         end_time = datetime.now().timestamp() + (duration_hours * 3600)
 
-        logger.info(
+        log.info(
             "Starting autonomous trading for {} hours (interval: {}s)",
             duration_hours,
             step_interval
@@ -351,7 +390,7 @@ class RookAgent:
                 # Log performance
                 if self.step_count % 10 == 0:  # Every 10 steps
                     report = self.get_performance_report()
-                    logger.info(
+                    log.info(
                         "Step {}: Return {:.2%}, Trades {}, Confidence {:.1%}",
                         self.step_count,
                         report["performance"]["total_return"],
@@ -363,9 +402,9 @@ class RookAgent:
                 time.sleep(step_interval)
 
         except KeyboardInterrupt:
-            logger.info("Autonomous trading stopped by user")
+            log.info("Autonomous trading stopped by user")
         except Exception as e:
-            logger.error("Autonomous trading failed: {}", e)
+            log.error("Autonomous trading failed: {}", e)
             raise
 
-        logger.info("Autonomous trading completed after {} steps", self.step_count)
+        log.info("Autonomous trading completed after {} steps", self.step_count)
