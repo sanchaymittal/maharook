@@ -1,6 +1,6 @@
 """Web3 client for Base blockchain interaction."""
 
-from typing import Any
+from typing import Any, Optional
 
 from eth_account import Account
 from loguru import logger
@@ -14,7 +14,7 @@ from maharook.core.exceptions import ConfigurationError, NetworkError
 class BaseClient:
     """Web3 client for Base blockchain interaction."""
 
-    def __init__(self, rpc_url: str | None = None, private_key: str | None = None):
+    def __init__(self, rpc_url: Optional[str] = None, private_key: Optional[str] = None) -> None:
         """Initialize Base client.
 
         Args:
@@ -39,7 +39,7 @@ class BaseClient:
             self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 
             # Set up account if private key provided
-            self.account: Account | None = None
+            self.account: Optional[Account] = None
             if self.private_key:
                 if not self.private_key.startswith('0x'):
                     self.private_key = f"0x{self.private_key}"
@@ -79,11 +79,11 @@ class BaseClient:
             raise NetworkError(f"Connection verification failed: {e}")
 
     @property
-    def address(self) -> str | None:
+    def address(self) -> Optional[str]:
         """Get wallet address."""
         return self.account.address if self.account else None
 
-    def get_balance(self, address: str | None = None) -> float:
+    def get_balance(self, address: Optional[str] = None) -> float:
         """Get ETH balance for address.
 
         Args:

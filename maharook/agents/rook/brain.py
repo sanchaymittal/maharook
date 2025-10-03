@@ -7,7 +7,7 @@ Supports LoRA adapter loading for specialized trading strategies.
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -65,9 +65,9 @@ class Brain:
         self,
         model_name: str,
         model_provider: str = "ollama",
-        adapter_path: str | None = None,
-        config: dict[str, Any] | None = None
-    ):
+        adapter_path: Optional[str] = None,
+        config: Optional[dict[str, Any]] = None
+    ) -> None:
         """Initialize the Brain.
 
         Args:
@@ -82,9 +82,9 @@ class Brain:
         self.config = config or {}
 
         # Initialize model clients
-        self.llm_client = None
-        self.tokenizer = None
-        self.model = None
+        self.llm_client: Optional[Any] = None
+        self.tokenizer: Optional[Any] = None
+        self.model: Optional[Any] = None
 
         self._initialize_model()
 
@@ -95,7 +95,7 @@ class Brain:
             f"with adapter {adapter_path}" if adapter_path else ""
         )
 
-    def _initialize_model(self):
+    def _initialize_model(self) -> None:
         """Initialize the appropriate model based on provider."""
         if self.model_provider == "openrouter":
             self._initialize_openrouter()
@@ -106,7 +106,7 @@ class Brain:
         else:
             raise ValueError(f"Unsupported model provider: {self.model_provider}")
 
-    def _initialize_openrouter(self):
+    def _initialize_openrouter(self) -> None:
         """Initialize OpenRouter client."""
         api_key = self.config.get("openrouter_api_key")
         if not api_key:
@@ -130,7 +130,7 @@ class Brain:
             logger.error("Failed to initialize OpenRouter: {}", e)
             raise
 
-    def _initialize_ollama(self):
+    def _initialize_ollama(self) -> None:
         """Initialize Ollama client."""
         ollama_url = self.config.get("ollama_url", "http://localhost:11434")
         self.llm_client = ollama.Client(host=ollama_url)
@@ -142,7 +142,7 @@ class Brain:
             logger.error("Failed to initialize Ollama: {}", e)
             raise
 
-    def _initialize_transformers(self):
+    def _initialize_transformers(self) -> None:
         """Initialize Transformers model with optional LoRA adapter."""
         try:
             # Load base model and tokenizer
@@ -432,7 +432,7 @@ Decision:"""
                 confidence=0.0
             )
 
-    def update_config(self, new_config: dict[str, Any]):
+    def update_config(self, new_config: dict[str, Any]) -> None:
         """Update brain configuration."""
         self.config.update(new_config)
         logger.info("Brain configuration updated")

@@ -5,6 +5,7 @@ A reusable module for executing swaps on Uniswap v4 on BASE
 """
 
 from decimal import Decimal, getcontext
+from typing import Optional, Any
 from web3 import Web3
 from web3.types import Wei
 from eth_abi import encode
@@ -155,7 +156,7 @@ PERMIT2_ABI = [
     }
 ]
 
-def calculate_price_from_sqrt_price_x96(sqrt_price_x96):
+def calculate_price_from_sqrt_price_x96(sqrt_price_x96: int) -> Optional[float]:
     """
     Calculate price from sqrtPriceX96 value using Uniswap V4's formula
     Price = (sqrtPriceX96 / 2^96) ^ 2
@@ -181,7 +182,7 @@ def calculate_price_from_sqrt_price_x96(sqrt_price_x96):
         logger.error(f"Error calculating price: {e}")
         return None
 
-def tick_to_price(tick):
+def tick_to_price(tick: int) -> Optional[float]:
     """
     Convert tick to price using the formula:
     price = 1.0001^tick
@@ -195,7 +196,7 @@ def tick_to_price(tick):
         logger.error(f"Error calculating price from tick: {e}")
         return None
 
-def setup_permit2_allowance(w3, account, token_address, spender_address, amount):
+def setup_permit2_allowance(w3: Web3, account: Any, token_address: str, spender_address: str, amount: int) -> bool:
     """
     Set up Permit2 allowance for a token
     """
@@ -261,7 +262,7 @@ class SwapParams(BaseModel):
     slippage_tolerance: float = 0.005  # 0.5% default
     deadline_minutes: int = 20
     fee_tier: int = 500  # 0.05% default
-    recipient: str | None = None
+    recipient: Optional[str] = None
 
     @field_validator("slippage_tolerance")
     @classmethod
@@ -292,21 +293,21 @@ class SwapParams(BaseModel):
 class SwapResult(BaseModel):
     """Result of a swap operation."""
     success: bool
-    transaction_hash: str | None = None
+    transaction_hash: Optional[str] = None
     amount_in: float
     amount_out: float
-    gas_used: int | None = None
-    gas_price: int | None = None
-    effective_price: float | None = None
-    slippage: float | None = None
-    error_message: str | None = None
+    gas_used: Optional[int] = None
+    gas_price: Optional[int] = None
+    effective_price: Optional[float] = None
+    slippage: Optional[float] = None
+    error_message: Optional[str] = None
 
 class UniswapV4Swapper:
     """
     A class to handle Uniswap v4 swaps on Base
     """
 
-    def __init__(self, client=None):
+    def __init__(self, client: Optional[Any] = None) -> None:
         """
         Initialize the swapper
 
@@ -372,7 +373,7 @@ class UniswapV4Swapper:
         logger.info(f"Calculated pool ID: {calculated_pool_id}")
         logger.info(f"Pool IDs match: {self.pool_id == calculated_pool_id}")
 
-    def _calculate_pool_id(self):
+    def _calculate_pool_id(self) -> str:
         """Calculate the Uniswap v4 pool ID for ETH/USDC"""
         # Extract pool key parameters
         token0 = self.eth_usdc_pool_key['currency_0']
@@ -391,7 +392,7 @@ class UniswapV4Swapper:
         calculated_pool_id = Web3.solidity_keccak(['bytes'], [pool_init_code]).hex()
         return f"0x{calculated_pool_id}"
 
-    def get_eth_price(self):
+    def get_eth_price(self) -> Optional[float]:
         """Get the current ETH price in USDC from the pool"""
         try:
             # Create state view contract instance
@@ -427,7 +428,7 @@ class UniswapV4Swapper:
             logger.error(f"Error getting ETH price: {e}")
             return None
 
-    def get_balances(self):
+    def get_balances(self) -> dict[str, float]:
         """Get ETH and USDC balances for the account"""
         try:
             eth_balance = self.w3.eth.get_balance(self.address)
@@ -441,7 +442,7 @@ class UniswapV4Swapper:
             logger.error(f"Error getting balances: {e}")
             return {"ETH": 0, "USDC": 0}
 
-    def swap_eth_to_usdc(self, eth_amount, slippage=0.01):
+    def swap_eth_to_usdc(self, eth_amount: float, slippage: float = 0.01) -> dict[str, Any]:
         """
         Swap ETH to USDC
 
@@ -563,7 +564,7 @@ class UniswapV4Swapper:
             logger.error(traceback.format_exc())
             return {"success": False, "error": str(e)}
 
-    def swap_usdc_to_eth(self, usdc_amount, slippage=0.01):
+    def swap_usdc_to_eth(self, usdc_amount: float, slippage: float = 0.01) -> dict[str, Any]:
         """
         Swap USDC to ETH
 
@@ -769,7 +770,7 @@ class UniswapV4Swapper:
             return {"success": False, "error": str(e)}
 
     # Legacy compatibility methods for ROOK integration
-    def swap_exact_input_single(self, params):
+    def swap_exact_input_single(self, params: SwapParams) -> SwapResult:
         """Legacy method for ROOK compatibility"""
         try:
             if params.token_in.upper() == "ETH":
@@ -803,7 +804,7 @@ class UniswapV4Swapper:
                 error_message=str(e)
             )
 
-    def get_portfolio_summary(self):
+    def get_portfolio_summary(self) -> dict[str, float]:
         """Get summary of token balances for ROOK compatibility"""
         balances = self.get_balances()
         return {

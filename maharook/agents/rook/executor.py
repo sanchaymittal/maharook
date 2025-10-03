@@ -6,7 +6,7 @@ Handles trade execution via Uniswap v4 swapper with risk management and monitori
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -19,9 +19,9 @@ from .swapper import SwapParams, SwapResult, UniswapV4Swapper
 class ExecutionResult:
     """Result of trade execution."""
     success: bool
-    trade: Trade | None = None
-    error_message: str | None = None
-    swap_result: SwapResult | None = None
+    trade: Optional[Trade] = None
+    error_message: Optional[str] = None
+    swap_result: Optional[SwapResult] = None
 
 
 class Executor:
@@ -38,8 +38,8 @@ class Executor:
     def __init__(
         self,
         swapper: UniswapV4Swapper,
-        config: dict[str, Any] | None = None
-    ):
+        config: Optional[dict[str, Any]] = None
+    ) -> None:
         """Initialize executor.
 
         Args:
@@ -247,7 +247,7 @@ class Executor:
             "avg_gas_cost": 0.0
         }
 
-    def update_config(self, new_config: dict[str, Any]):
+    def update_config(self, new_config: dict[str, Any]) -> None:
         """Update executor configuration."""
         self.config.update(new_config)
 

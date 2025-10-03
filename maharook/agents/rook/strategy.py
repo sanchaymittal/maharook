@@ -5,6 +5,7 @@ Basic strategy components and order definitions for ROOK agents.
 """
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -21,10 +22,10 @@ class Order:
 class Strategy:
     """Base strategy class for trading logic."""
 
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self, name: str) -> None:
+        self.name: str = name
 
-    def generate_signal(self, market_data: dict) -> Order | None:
+    def generate_signal(self, market_data: dict[str, float]) -> Optional[Order]:
         """Generate trading signal based on market data."""
         raise NotImplementedError("Subclasses must implement generate_signal")
 
@@ -32,12 +33,12 @@ class Strategy:
 class SimpleRebalanceStrategy(Strategy):
     """Simple rebalancing strategy."""
 
-    def __init__(self, target_allocation: float = 0.5, threshold: float = 0.05):
+    def __init__(self, target_allocation: float = 0.5, threshold: float = 0.05) -> None:
         super().__init__("SimpleRebalance")
-        self.target_allocation = target_allocation
-        self.threshold = threshold
+        self.target_allocation: float = target_allocation
+        self.threshold: float = threshold
 
-    def generate_signal(self, market_data: dict) -> Order | None:
+    def generate_signal(self, market_data: dict[str, float]) -> Optional[Order]:
         """Generate rebalancing order if needed."""
         current_allocation = market_data.get("current_eth_allocation", 0.5)
         deviation = abs(current_allocation - self.target_allocation)

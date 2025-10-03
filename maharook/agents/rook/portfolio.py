@@ -7,6 +7,7 @@ Handles portfolio tracking, allocation management, and performance metrics.
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional, Any
 
 from loguru import logger
 
@@ -69,8 +70,8 @@ class Portfolio:
         target_eth_allocation: float = 0.5,
         initial_eth_balance: float = 0.0,
         initial_usdc_balance: float = 0.0,
-        client=None
-    ):
+        client: Optional[Any] = None
+    ) -> None:
         """Initialize portfolio.
 
         Args:
@@ -103,7 +104,7 @@ class Portfolio:
             float(self.usdc_balance)
         )
 
-    def update_balances(self, eth_balance: float, usdc_balance: float):
+    def update_balances(self, eth_balance: float, usdc_balance: float) -> None:
         """Update portfolio balances."""
         self.eth_balance = Decimal(str(eth_balance))
         self.usdc_balance = Decimal(str(usdc_balance))
@@ -114,7 +115,7 @@ class Portfolio:
             float(self.usdc_balance)
         )
 
-    def update_from_client(self):
+    def update_from_client(self) -> None:
         """Update balances from blockchain client."""
         if not self.client:
             logger.warning("No client configured for balance updates")
@@ -154,7 +155,7 @@ class Portfolio:
             unrealized_pnl=unrealized_pnl
         )
 
-    def record_trade(self, trade: Trade):
+    def record_trade(self, trade: Trade) -> None:
         """Record a completed trade."""
         self.trade_history.append(trade)
 
@@ -182,7 +183,7 @@ class Portfolio:
                 trade.tx_hash[:10] + "..." if len(trade.tx_hash) > 10 else trade.tx_hash
             )
 
-    def save_snapshot(self, eth_price: float):
+    def save_snapshot(self, eth_price: float) -> None:
         """Save current portfolio snapshot."""
         state = self.snapshot(eth_price)
         snapshot = PortfolioSnapshot(
@@ -320,7 +321,7 @@ class Portfolio:
 
         return True, "Trade allowed"
 
-    def get_summary(self, eth_price: float) -> dict[str, any]:
+    def get_summary(self, eth_price: float) -> dict[str, Any]:
         """Get comprehensive portfolio summary."""
         state = self.snapshot(eth_price)
         performance = self.calculate_performance()
