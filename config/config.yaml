@@ -93,6 +93,7 @@ trading:
 
   # Risk thresholds
   high_volatility_threshold: 0.1  # 10%
+  min_portfolio_value_usd: 10.0  # Minimum portfolio value to continue trading
 
 # Model Configuration
 model:

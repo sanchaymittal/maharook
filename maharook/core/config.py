@@ -5,6 +5,7 @@ Centralized configuration following constitutional principles.
 """
 
 from pathlib import Path
+from typing import Optional
 
 import yaml
 from pydantic import BaseModel, field_validator
@@ -31,7 +32,7 @@ class ContractConfig(BaseModel):
     """Smart contract configuration."""
     name: str
     address: str
-    abi_path: str | None = None
+    abi_path: Optional[str] = None
 
 
 class NetworkConfig(BaseModel):
@@ -39,14 +40,14 @@ class NetworkConfig(BaseModel):
     name: str
     chain_id: int
     rpc_url: str
-    ws_url: str | None = None
-    explorer_url: str | None = None
+    ws_url: Optional[str] = None
+    explorer_url: Optional[str] = None
 
 
 class TradingConfig(BaseModel):
     """Trading configuration."""
     max_slippage_bps: int = 50
-    gas_price_gwei: int | None = None
+    gas_price_gwei: Optional[int] = None
     max_gas_limit: int = 500000
     min_trade_size_eth: float = 0.001
 
@@ -61,6 +62,7 @@ class TradingConfig(BaseModel):
     default_slippage: float = 0.005
     default_deadline_minutes: int = 20
     high_volatility_threshold: float = 0.1
+    min_portfolio_value_usd: float = 10.0
     default_model_name: str = "fin-r1"
     default_model_provider: str = "ollama"
 
@@ -80,16 +82,16 @@ class CoreSettings(BaseSettings):
     log_level: str = "INFO"
 
     # Network settings - loaded from config.yaml
-    network: NetworkConfig | None = None
+    network: Optional[NetworkConfig] = None
 
     # Trading settings - loaded from config.yaml
-    trading: TradingConfig | None = None
+    trading: Optional[TradingConfig] = None
 
     # API Keys
-    basescan_api_key: str | None = None
-    coingecko_api_key: str | None = None
-    openrouter_api_key: str | None = None
-    fluence_api_key: str | None = None
+    basescan_api_key: Optional[str] = None
+    coingecko_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+    fluence_api_key: Optional[str] = None
 
     # Paths
     config_dir: Path = Path("config")
@@ -105,22 +107,22 @@ class CoreSettings(BaseSettings):
 class ConfigManager:
     """Configuration manager that loads from files and validates."""
 
-    def __init__(self, config_path: Path | None = None):
-        self.config_path = config_path or Path("config")
-        self.settings = CoreSettings()
+    def __init__(self, config_path: Optional[Path] = None) -> None:
+        self.config_path: Path = config_path or Path("config")
+        self.settings: CoreSettings = CoreSettings()
         self._tokens: dict[str, TokenConfig] = {}
         self._contracts: dict[str, ContractConfig] = {}
 
         self._load_configurations()
 
-    def _load_configurations(self):
+    def _load_configurations(self) -> None:
         """Load all configuration from single config.yaml file."""
         try:
             self._load_from_single_file()
         except Exception as e:
             raise ConfigurationError(f"Failed to load configuration: {e}")
 
-    def _load_from_single_file(self):
+    def _load_from_single_file(self) -> None:
         """Load all configuration from config.yaml - single source of truth."""
         config_file = self.config_path / "config.yaml"
         if not config_file.exists():
@@ -171,6 +173,7 @@ class ConfigManager:
                 default_slippage=trading_data.get('default_slippage', 0.005),
                 default_deadline_minutes=trading_data.get('default_deadline_minutes', 20),
                 high_volatility_threshold=trading_data.get('high_volatility_threshold', 0.1),
+                min_portfolio_value_usd=trading_data.get('min_portfolio_value_usd', 10.0),
                 default_model_name=config_data.get('model', {}).get('default_name', 'fin-r1'),
                 default_model_provider=config_data.get('model', {}).get('default_provider', 'ollama')
             )
