@@ -173,30 +173,99 @@ class AgentRegistry:
         except (OSError, ProcessLookupError):
             return False
 
-    def _cleanup_stale_agents(self) -> None:
-        """Clean up stale agent entries."""
+    def _cleanup_stale_agents(self, max_age_hours: float = 1.0) -> int:
+        """Clean up stale agent entries.
+
+        Args:
+            max_age_hours: Maximum age in hours before cleanup (default: 1 hour)
+
+        Returns:
+            Number of agents cleaned up
+        """
         current_time = time.time()
+        max_age_seconds = max_age_hours * 3600
+        cleaned_count = 0
 
         for agent_file in self.registry_dir.glob("*.json"):
             try:
                 with open(agent_file, 'r') as f:
                     agent_data = json.load(f)
 
-                # Remove entries older than 1 hour or from dead processes
+                # Remove entries older than max_age or from dead processes
                 last_update = agent_data.get('last_update', 0)
                 pid = agent_data.get('pid', 0)
+                agent_id = agent_data.get('agent_id', 'unknown')
 
-                if (current_time - last_update) > 3600 or not self._is_process_running(pid):
+                should_cleanup = False
+                reason = ""
+
+                if (current_time - last_update) > max_age_seconds:
+                    should_cleanup = True
+                    reason = f"stale ({(current_time - last_update) / 3600:.1f}h old)"
+                elif not self._is_process_running(pid):
+                    should_cleanup = True
+                    reason = f"dead process (PID {pid})"
+
+                if should_cleanup:
                     agent_file.unlink()
-                    logger.info("🧹 Cleaned up stale agent: {}", agent_data.get('agent_id', 'unknown'))
+                    cleaned_count += 1
+                    logger.info("🧹 Cleaned up {} agent: {}", reason, agent_id)
 
-            except Exception as e:
-                logger.error("❌ Failed to cleanup {}: {}", agent_file, e)
+            except json.JSONDecodeError as e:
+                logger.error("❌ Corrupted agent file {}: {}", agent_file, e)
                 # Remove corrupted files
                 try:
                     agent_file.unlink()
-                except:
-                    pass
+                    cleaned_count += 1
+                    logger.info("🧹 Removed corrupted agent file: {}", agent_file.name)
+                except Exception as unlink_error:
+                    logger.error("Failed to remove corrupted file: {}", unlink_error)
+            except Exception as e:
+                logger.error("❌ Failed to cleanup {}: {}", agent_file, e)
+
+        if cleaned_count > 0:
+            logger.info("🧹 Cleanup complete: removed {} stale agent(s)", cleaned_count)
+
+        return cleaned_count
+
+    def cleanup_completed_agents(self, min_age_minutes: float = 5.0) -> int:
+        """Clean up completed/stopped agents after minimum age.
+
+        Args:
+            min_age_minutes: Minimum age in minutes before cleanup (default: 5 minutes)
+
+        Returns:
+            Number of agents cleaned up
+        """
+        current_time = time.time()
+        min_age_seconds = min_age_minutes * 60
+        cleaned_count = 0
+
+        for agent_file in self.registry_dir.glob("*.json"):
+            try:
+                with open(agent_file, 'r') as f:
+                    agent_data = json.load(f)
+
+                status = agent_data.get('status', 'unknown')
+                last_update = agent_data.get('last_update', 0)
+                agent_id = agent_data.get('agent_id', 'unknown')
+
+                # Only cleanup completed/stopped agents after min age
+                if status in ['completed', 'stopped', 'error']:
+                    age_seconds = current_time - last_update
+                    if age_seconds > min_age_seconds:
+                        agent_file.unlink()
+                        cleaned_count += 1
+                        logger.info("🧹 Cleaned up {} agent (age: {:.1f}m): {}",
+                                  status, age_seconds / 60, agent_id)
+
+            except Exception as e:
+                logger.error("❌ Failed to cleanup completed agent {}: {}", agent_file, e)
+
+        if cleaned_count > 0:
+            logger.info("🧹 Completed agent cleanup: removed {} agent(s)", cleaned_count)
+
+        return cleaned_count
 
 
 # Global registry instance
