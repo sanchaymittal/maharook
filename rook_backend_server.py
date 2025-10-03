@@ -9,7 +9,7 @@ import json
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
@@ -19,74 +19,100 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from maharook.core.agent_registry import get_agent_registry
+from maharook.core.logging import (
+    log,
+    set_trace_id,
+    generate_trace_id,
+    with_trace_id,
+)
+from maharook.core.metrics import get_metrics_collector
 
 
 class ConnectionManager:
     """Manage WebSocket connections."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.active_connections: List[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket) -> WebSocket:
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info("WebSocket client connected. Total: {}", len(self.active_connections))
+        trace_id = generate_trace_id()
+        set_trace_id(trace_id)
+        log.info("WebSocket client connected. Total: {}", len(self.active_connections))
         return websocket
 
-    def disconnect(self, websocket: WebSocket):
+    def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        logger.info("WebSocket client disconnected. Total: {}", len(self.active_connections))
+        trace_id = generate_trace_id()
+        set_trace_id(trace_id)
+        log.info("WebSocket client disconnected. Total: {}", len(self.active_connections))
 
-    async def broadcast(self, message: dict):
-        """Broadcast message to all connected clients."""
+    async def broadcast(self, message: dict[str, Any]) -> None:
+        """Broadcast message to all connected clients with fail-fast error handling."""
         if not self.active_connections:
-            logger.debug("No active connections for broadcast")
-            return
+            raise RuntimeError(
+                "No active WebSocket connections available for broadcast. "
+                "Ensure clients are connected before attempting to broadcast messages."
+            )
 
-        logger.info("📡 Broadcasting {} to {} clients", message.get("type", "unknown"), len(self.active_connections))
+        trace_id = generate_trace_id()
+        set_trace_id(trace_id)
+        log.info("📡 Broadcasting {} to {} clients", message.get("type", "unknown"), len(self.active_connections))
 
         # Validate message before broadcasting
         try:
             json_data = json.dumps(message, default=str)
             # Check payload size
             if len(json_data) > 32768:  # 32KB limit
-                logger.warning("Message too large ({}), truncating", len(json_data))
-                return
+                raise ValueError(
+                    f"Message size ({len(json_data)} bytes) exceeds 32KB limit. "
+                    f"Reduce message payload or implement chunking."
+                )
         except (TypeError, ValueError) as e:
-            logger.error("Failed to serialize message: {}, message: {}", e, message)
-            return
+            raise ValueError(f"Failed to serialize broadcast message: {e}. Message data: {message}")
 
         disconnected = []
+        failed_sends = []
+
         for connection in self.active_connections:
             try:
                 await connection.send_text(json_data)
                 # Small delay to prevent overwhelming
                 await asyncio.sleep(0.01)  # 10ms delay between sends
             except Exception as e:
-                logger.warning("Failed to send to client: {}", e)
+                logger.error("Failed to send to WebSocket client: {}", e)
                 disconnected.append(connection)
+                failed_sends.append(str(e))
 
         # Remove disconnected clients
         for connection in disconnected:
             self.disconnect(connection)
 
+        # If all broadcasts failed, raise an error
+        if failed_sends and len(failed_sends) == len(self.active_connections):
+            raise RuntimeError(
+                f"All WebSocket broadcasts failed. Errors: {'; '.join(failed_sends[:3])}. "
+                f"Check network connectivity and WebSocket client health."
+            )
+
 
 class ROOKBackendServer:
     """Unified ROOK backend server with WebSocket streaming and API endpoints."""
 
-    def __init__(self, port: int = 8001):
-        self.port = port
-        self.app = FastAPI(title="ROOK Trading Arena Backend", version="1.0.0")
-        self.connection_manager = ConnectionManager()
+    def __init__(self, port: int = 8001) -> None:
+        self.port: int = port
+        self.app: FastAPI = FastAPI(title="ROOK Trading Arena Backend", version="1.0.0")
+        self.connection_manager: ConnectionManager = ConnectionManager()
         self.registry = get_agent_registry()
-        self.known_agents = set()
-        self.last_states = {}
+        self.known_agents: set[str] = set()
+        self.last_states: Dict[str, Any] = {}
 
         self._setup_routes()
         self._setup_cors()
 
-    def _setup_cors(self):
+    def _setup_cors(self) -> None:
         """Setup CORS for frontend integration."""
         self.app.add_middleware(
             CORSMiddleware,
@@ -96,7 +122,7 @@ class ROOKBackendServer:
             allow_headers=["*"],
         )
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         """Setup API routes and WebSocket endpoints."""
 
         @self.app.websocket("/ws")
@@ -137,6 +163,68 @@ class ROOKBackendServer:
         @self.app.get("/")
         async def root():
             return {"message": "ROOK Trading Arena Backend", "status": "running", "agents": len(self.known_agents)}
+
+        @self.app.get("/health")
+        async def health_check():
+            """Health check endpoint for monitoring and orchestration."""
+            try:
+                # Check agent registry connection
+                registry_healthy = True
+                try:
+                    agents = self.registry.list_agents()
+                    registry_healthy = True
+                except Exception as e:
+                    registry_healthy = False
+                    log.error("Registry health check failed: {}", e)
+
+                # Check WebSocket connections
+                ws_healthy = len(self.connection_manager.active_connections) >= 0  # Always true, just checking it's accessible
+
+                # Overall health status
+                healthy = registry_healthy and ws_healthy
+
+                return {
+                    "status": "healthy" if healthy else "unhealthy",
+                    "checks": {
+                        "agent_registry": "up" if registry_healthy else "down",
+                        "websocket_manager": "up" if ws_healthy else "down"
+                    },
+                    "metrics": {
+                        "active_agents": len(self.known_agents),
+                        "active_websocket_connections": len(self.connection_manager.active_connections)
+                    },
+                    "timestamp": time.time()
+                }
+            except Exception as e:
+                log.error("Health check failed: {}", e)
+                return {
+                    "status": "unhealthy",
+                    "error": str(e),
+                    "timestamp": time.time()
+                }
+
+        @self.app.get("/ready")
+        async def readiness_check():
+            """Readiness check - server is ready to accept requests."""
+            try:
+                # Server is ready if it can respond
+                return {
+                    "status": "ready",
+                    "timestamp": time.time()
+                }
+            except Exception as e:
+                log.error("Readiness check failed: {}", e)
+                raise HTTPException(status_code=503, detail="Service not ready")
+
+        @self.app.get("/metrics")
+        async def get_metrics():
+            """Get collected metrics."""
+            try:
+                metrics_collector = get_metrics_collector()
+                return metrics_collector.get_all_metrics()
+            except Exception as e:
+                log.error("Failed to get metrics: {}", e)
+                raise HTTPException(status_code=500, detail=str(e))
 
         @self.app.get("/agents")
         async def list_agents():
@@ -198,23 +286,24 @@ class ROOKBackendServer:
                 logger.error("Failed to stop agent {}: {}", agent_id, e)
                 raise HTTPException(status_code=500, detail=str(e))
 
-    async def _monitor_agents(self):
+    @with_trace_id
+    async def _monitor_agents(self) -> None:
         """Monitor agent registry and broadcast real updates."""
         while True:
             try:
                 # Get current agents from registry
                 registry_agents = self.registry.list_agents()
-                logger.debug("Monitoring: Found {} agents", len(registry_agents))
+                log.debug("Monitoring: Found {} agents", len(registry_agents))
 
                 for agent_state in registry_agents:
                     agent_id = agent_state.agent_id
-                    logger.debug("Processing agent: {} - Steps: {}, Trades: {}, Last Update: {}",
+                    log.debug("Processing agent: {} - Steps: {}, Trades: {}, Last Update: {}",
                                 agent_id, agent_state.total_steps, agent_state.total_trades, agent_state.last_update)
 
                     # Check if this is a new agent
                     if agent_id not in self.known_agents:
                         self.known_agents.add(agent_id)
-                        logger.info("📡 New agent detected: {}", agent_state.name)
+                        log.info("📡 New agent detected: {}", agent_state.name)
 
                         # Broadcast agent discovery
                         await self.connection_manager.broadcast({
@@ -250,7 +339,7 @@ class ROOKBackendServer:
                     last_state = self.last_states.get(agent_id)
 
                     if last_state:
-                        logger.debug("State comparison for {}: Current({}, {}, {}) vs Last({}, {}, {})",
+                        log.debug("State comparison for {}: Current({}, {}, {}) vs Last({}, {}, {})",
                                     agent_id,
                                     agent_state.total_steps, agent_state.total_trades, agent_state.last_update,
                                     last_state.total_steps, last_state.total_trades, last_state.last_update)
@@ -323,13 +412,25 @@ class ROOKBackendServer:
                         "data": {"agent_id": agent_id, "timestamp": time.time()}
                     })
 
+                # Periodic cleanup of completed agents (every 60 iterations = ~1 minute)
+                if hasattr(self, '_cleanup_counter'):
+                    self._cleanup_counter += 1
+                else:
+                    self._cleanup_counter = 0
+
+                if self._cleanup_counter >= 60:
+                    self._cleanup_counter = 0
+                    cleaned = self.registry.cleanup_completed_agents(min_age_minutes=5.0)
+                    if cleaned > 0:
+                        log.info("🧹 Periodic cleanup: removed {} completed agent(s)", cleaned)
+
             except Exception as e:
-                logger.error("❌ Error monitoring agents: {}", e)
+                log.error("❌ Error monitoring agents: {}", e)
 
             # Check every second for real-time updates
             await asyncio.sleep(1)
 
-    def _create_log_message(self, current_state, last_state):
+    def _create_log_message(self, current_state: Any, last_state: Optional[Any]) -> Optional[dict[str, Any]]:
         """Create a log message based on state changes."""
         agent_id = current_state.agent_id
 
@@ -386,20 +487,22 @@ class ROOKBackendServer:
 
         return None
 
-    def run(self, host: str = "0.0.0.0"):
+    def run(self, host: str = "0.0.0.0") -> None:
         """Run the unified backend server."""
-        logger.info("🚀 Starting ROOK Trading Arena Backend on {}:{}", host, self.port)
+        trace_id = generate_trace_id()
+        set_trace_id(trace_id)
+        log.info("🚀 Starting ROOK Trading Arena Backend on {}:{}", host, self.port)
 
         @self.app.on_event("startup")
         async def startup_event():
             # Start agent monitoring
             asyncio.create_task(self._monitor_agents())
-            logger.info("🔄 Agent monitoring started")
+            log.info("🔄 Agent monitoring started")
 
         uvicorn.run(self.app, host=host, port=self.port, log_level="info")
 
 
-def main():
+def main() -> None:
     """CLI entry point."""
     import argparse
 
