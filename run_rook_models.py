@@ -20,6 +20,15 @@ from maharook.agents.rook.brain import MarketFeatures
 from maharook.blockchain.client import BaseClient
 from maharook.core.config import settings
 from maharook.core.agent_registry import AgentRegistry, AgentState, get_agent_registry
+from maharook.core.logging import (
+    log,
+    set_agent_id,
+    set_session_id,
+    set_trace_id,
+    generate_trace_id,
+    with_trace_id,
+    configure_logging,
+)
 
 
 class RookModelRunner:
@@ -36,10 +45,13 @@ class RookModelRunner:
 
     def _load_config(self) -> Dict:
         """Load configuration from YAML file."""
+        trace_id = generate_trace_id()
+        set_trace_id(trace_id)
+
         with open(self.config_path) as f:
             config = yaml.safe_load(f)
 
-        logger.info("📋 Loaded configuration: {}", self.config_path.name)
+        log.info("📋 Loaded configuration: {}", self.config_path.name)
         return config
 
     def create_rook_agent(self) -> RookAgent:
@@ -80,16 +92,26 @@ class RookModelRunner:
         )
 
         # Create blockchain client from configuration
+        private_key = blockchain_config.get("private_key") or os.environ.get("BLOCKCHAIN_PRIVATE_KEY")
+        if not private_key:
+            raise ValueError(
+                "BLOCKCHAIN_PRIVATE_KEY must be set in .env file or provided in blockchain configuration. "
+                "This is required for signing blockchain transactions."
+            )
+
         client = BaseClient(
             rpc_url=blockchain_config.get("rpc_url", "http://localhost:8545"),
-            private_key=blockchain_config.get("private_key", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+            private_key=private_key
         )
 
         # Create agent
         agent = RookAgent(config=rook_config, client=client)
         agent.name = agent_config.get("name", "ROOK-Agent")
 
-        logger.success("✅ Created ROOK agent: {}", agent.name)
+        # Set agent context for logging
+        set_agent_id(agent.agent_id)
+
+        log.success("✅ Created ROOK agent: {}", agent.name)
         return agent
 
     def simulate_market_data(self) -> MarketFeatures:
@@ -110,15 +132,21 @@ class RookModelRunner:
             spread_bps=random.uniform(3, 8)  # 3-8 bps spread
         )
 
+    @with_trace_id
     async def run_trading_session(self, duration_minutes: int = 60):
         """Run a trading session with the agent."""
-        logger.info("🚀 Starting trading session for {} minutes", duration_minutes)
+        # Generate session ID for this trading session
+        session_id = generate_trace_id()
+        set_session_id(session_id)
+
+        log.info("🚀 Starting trading session for {} minutes", duration_minutes)
 
         # Initialize agent
         self.agent = self.create_rook_agent()
 
         # Generate unique agent ID and register
         self.agent_id = f"rook_{self.agent.config.pair.lower()}_{int(time.time())}"
+        set_agent_id(self.agent_id)
 
         # Create agent state for registry
         agent_state = AgentState(
@@ -184,7 +212,7 @@ class RookModelRunner:
 
                 # Log progress
                 if step_count % 10 == 0:
-                    logger.info(
+                    log.info(
                         "Step {}: Price ${:.2f}, Action: {}, Portfolio: ${:.2f}",
                         step_count,
                         market_features.price,
@@ -196,10 +224,10 @@ class RookModelRunner:
                 await asyncio.sleep(5)  # 5 second intervals
 
         except KeyboardInterrupt:
-            logger.info("Trading session stopped by user after {} steps", step_count)
+            log.info("Trading session stopped by user after {} steps", step_count)
             self.registry.update_agent(self.agent_id, status="stopped")
         except Exception as e:
-            logger.error("Trading session failed: {}", e)
+            log.error("Trading session failed: {}", e)
             self.registry.update_agent(self.agent_id, status="error")
             raise
         finally:
@@ -207,7 +235,7 @@ class RookModelRunner:
             if self.agent_id:
                 self.registry.update_agent(self.agent_id, status="completed", last_update=time.time())
 
-        logger.success("✅ Trading session completed: {} steps", step_count)
+        log.success("✅ Trading session completed: {} steps", step_count)
 
         # Generate final report
         if self.agent:
@@ -223,23 +251,23 @@ class RookModelRunner:
         try:
             report = self.agent.get_performance_report()
 
-            logger.info("📊 Performance Report:")
-            logger.info("Agent: {}", self.agent.name)
+            log.info("📊 Performance Report:")
+            log.info("Agent: {}", self.agent.name)
 
             if "portfolio" in report:
                 portfolio = report["portfolio"]
-                logger.info("Portfolio Value: ${:.2f}", portfolio.get("total_value_usd", 0))
-                logger.info("ETH Balance: {:.6f}", portfolio.get("eth_balance", 0))
-                logger.info("USDC Balance: {:.2f}", portfolio.get("usdc_balance", 0))
+                log.info("Portfolio Value: ${:.2f}", portfolio.get("total_value_usd", 0))
+                log.info("ETH Balance: {:.6f}", portfolio.get("eth_balance", 0))
+                log.info("USDC Balance: {:.2f}", portfolio.get("usdc_balance", 0))
 
             if "performance" in report:
                 performance = report["performance"]
-                logger.info("Total Return: {:.2%}", performance.get("total_return", 0))
-                logger.info("Total Trades: {}", performance.get("total_trades", 0))
-                logger.info("Win Rate: {:.1%}", performance.get("win_rate", 0))
+                log.info("Total Return: {:.2%}", performance.get("total_return", 0))
+                log.info("Total Trades: {}", performance.get("total_trades", 0))
+                log.info("Win Rate: {:.1%}", performance.get("win_rate", 0))
 
         except Exception as e:
-            logger.warning("Failed to generate report: {}", e)
+            log.warning("Failed to generate report: {}", e)
 
 
 async def main():
@@ -248,15 +276,16 @@ async def main():
     parser.add_argument("--config", required=True, help="Path to model configuration YAML")
     parser.add_argument("--duration", type=int, default=60, help="Trading session duration in minutes")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument("--log-format", default="human", choices=["human", "json"], help="Log output format")
+    parser.add_argument("--log-file", default=None, help="Optional log file path")
 
     args = parser.parse_args()
 
-    # Configure logging
-    logger.remove()
-    logger.add(
-        lambda msg: print(msg, end=""),
+    # Configure structured logging
+    configure_logging(
         level=args.log_level,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>"
+        format=args.log_format,
+        log_file=args.log_file
     )
 
     # Run model
